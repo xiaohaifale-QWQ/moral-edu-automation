@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.2"
+APP_VERSION = "1.8.3"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -324,6 +324,7 @@ class MoralScoreApp:
             "month": self.current_month.get(),
             "week": self.current_week.get(),
             "class_name": self.class_name,
+            "dnd": bool(getattr(self, "dnd_active", False)),
             "base_dir": self._base_dir(),
             "updated": datetime.datetime.now().isoformat(timespec="seconds"),
         }
@@ -644,26 +645,44 @@ class MoralScoreApp:
             pass
 
     def _enable_drag_drop(self):
-        """把名单模板 xlsx/csv 拖进窗口即可导入。
+        """把名单模板 xlsx/csv 拖进窗口任意位置即可导入。
 
-        依赖 tkinterdnd2（打包时已内置）；源码环境没装或 tkdnd 没加载成功
-        就静默跳过，其余功能不受影响。
+        - 依赖 tkinterdnd2（打包已内置）；不可用时状态栏一次性提示并记入
+          state.json 的 "dnd" 字段，方便远程排查
+        - 主窗口所有非输入类控件都注册成放置目标（含以后新建的对话框），
+          避免拖到某个卡片上没反应
         """
+        self.dnd_active = False
         try:
             from tkinterdnd2 import DND_FILES
-        except ImportError:
+            self.root.tk.call("package", "present", "tkdnd")
+        except Exception:
+            self.dnd_active = False
+            try:
+                self.week_status.config(text="拖拽导入不可用（缺少组件），请用「班级名单」按钮导入",
+                                        foreground=WARN_C)
+            except Exception:
+                pass
             return
-        targets = [self.root, self.body, self.frame_week, self.frame_month,
-                   self.frame_dorm, self.frame_ai,
-                   getattr(self, "tree_week", None), getattr(self, "tree_month", None)]
-        for w in targets:
-            if w is None:
-                continue
+
+        def register(w):
             try:
                 w.drop_target_register(DND_FILES)
                 w.bind("<<Drop>>", self._handle_dropped_files)
             except Exception:
                 pass
+
+        def walk(w):
+            for c in w.winfo_children():
+                if isinstance(c, (ttk.Entry, tk.Entry, tk.Text, ttk.Combobox,
+                                  ttk.Spinbox, ttk.Button, tk.Button)):
+                    continue          # 输入件/按钮不抢拖放
+                register(c)
+                walk(c)
+
+        register(self.root)
+        walk(self.root)
+        self.dnd_active = True
 
     def _handle_dropped_files(self, event):
         """拖入名单文件 → 确认 → 填班级名 → 走现成的写模板/重载流程。"""
@@ -673,7 +692,18 @@ class MoralScoreApp:
             return
         target = next((p for p in paths if str(p).lower().endswith((".xlsx", ".csv"))), None)
         if not target or not os.path.exists(target):
-            return      # 拖进来的不是名单文件：不弹窗不打扰
+            # 拖了文件但不是名单格式：给一句轻提示（快捷方式/.xls 等常见误区）
+            name = paths[0] if paths else ""
+            hint = "只支持拖入 .xlsx / .csv 名单文件"
+            if name.lower().endswith(".lnk"):
+                hint = "拖的是快捷方式，请拖文件本身（.xlsx）"
+            elif name.lower().endswith(".xls"):
+                hint = "旧版 .xls 不支持，请先在 Excel/WPS 里另存为 .xlsx"
+            try:
+                notify(self.root, hint, title="拖入无效", kind="warning", duration=6000)
+            except Exception:
+                pass
+            return
         if not messagebox.askyesno(
                 "导入名单",
                 f"把「{os.path.basename(target)}」作为班级名单导入吗？\n\n"
@@ -1996,6 +2026,33 @@ class MoralScoreApp:
             side="right", padx=(0, 8))
         ttk.Button(btns, text="解析", command=parse_text).pack(side="left")
         ttk.Button(btns, text="从文件导入…", command=import_file).pack(side="left", padx=(8, 0))
+
+        # 对话框本身也支持拖入名单文件（拖到弹窗上 = 直接读入并预览）
+        try:
+            from tkinterdnd2 import DND_FILES
+            top.drop_target_register(DND_FILES)
+
+            def drop_into_dialog(event):
+                try:
+                    ps = [str(x) for x in self.root.tk.splitlist(event.data)]
+                except Exception:
+                    return
+                path = next((x for x in ps if str(x).lower().endswith((".xlsx", ".csv"))), None)
+                if not path or not os.path.exists(path):
+                    return
+                try:
+                    parts = self._read_roster_file(path)
+                except Exception as exc:
+                    messagebox.showerror("读取失败", f"{path}\n\n{exc}", parent=top)
+                    return
+                txt.delete("1.0", "end")
+                txt.insert("1.0", "\n".join(
+                    "\t".join(str(c).strip() for c in row if str(c).strip()) for row in parts))
+                validate(parts, "拖入文件")
+
+            top.bind("<<Drop>>", drop_into_dialog)
+        except Exception:
+            pass
 
     @staticmethod
     def _copy_cell_style(src, dst):

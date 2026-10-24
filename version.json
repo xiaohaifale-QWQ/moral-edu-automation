@@ -1,14 +1,14 @@
 {
-  "version": "1.8.2",
-  "notes": "1. 寝室统计页合并显示：AI 写入的寝室记录直接挂在对应寝室卡片下（青色=AI，橙色=相似度匹配，点击可改），不再单独成区\n2. 名单没有寝室号时显示引导提示",
+  "version": "1.8.3",
+  "notes": "1. 拖拽导入增强：整个窗口任意位置都能拖入名单（含「班级名单」弹窗），不再有点不到的死角\n2. 拖入的不是 .xlsx/.csv 时给出明确提示（如拖了快捷方式或旧版 .xls）\n3. 拖拽组件状态写入 state.json，便于排查",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.2/deyufen-1.8.2-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.2/deyufen-1.8.2-win64.zip",
-      "sha256": "b73f78ca9994ccc84d8236e1355099b64f9f426e85e0912a4b283c6f44094834",
-      "size": 110611348
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.3/deyufen-1.8.3-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.3/deyufen-1.8.3-win64.zip",
+      "sha256": "56821685a42efb3c90e1df6a2acd80c2b973c36565798497765b6a0d06bb0d5c",
+      "size": 110612941
     }
   }
 }
