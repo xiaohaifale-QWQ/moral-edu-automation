@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog, messagebox
 import ast
 import hashlib
 import json
@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.3"
+APP_VERSION = "1.8.3.1"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -37,15 +37,20 @@ UPDATE_DIR_NAME = "deyufen-update"      # %TEMP% 下的下载工作目录
 
 
 def vtuple(s):
-    """'1.7.0' → (1, 7, 0)；带后缀的 '2.0.1-beta' 取前导数字；解析不了按 (0,0,0)。"""
+    """'1.8.3.1' → (1, 8, 3, 1)；'1.8.3' → (1, 8, 3, 0)。
+
+    四位版本规则：大更新改第 1 位、小更新改第 2 位、功能修订改第 3 位、
+    bug 修复改第 4 位。不足四位补 0，保证不同位数的版本能正确比较。
+    带后缀（如 '2.0.1-beta'）取前导数字；解析不了按 (0,0,0,0)。
+    """
     parts = []
     try:
-        for x in str(s).strip().split(".")[:3]:
+        for x in str(s).strip().split(".")[:4]:
             m = re.match(r"\d+", x.strip())
             parts.append(int(m.group(0)) if m else 0)
     except (TypeError, ValueError):
-        return (0, 0, 0)
-    while len(parts) < 3:
+        return (0, 0, 0, 0)
+    while len(parts) < 4:
         parts.append(0)
     return tuple(parts)
 
@@ -704,12 +709,6 @@ class MoralScoreApp:
             except Exception:
                 pass
             return
-        if not messagebox.askyesno(
-                "导入名单",
-                f"把「{os.path.basename(target)}」作为班级名单导入吗？\n\n"
-                f"导入会覆盖模板里现有名单（原文件先自动备份），\n"
-                f"当前未保存的加减分录入会被清除。"):
-            return
         try:
             parts_list = self._read_roster_file(target)
         except Exception as exc:
@@ -720,13 +719,55 @@ class MoralScoreApp:
                 "名单为空",
                 "没能从文件里解析出名单。\n"
                 + (errors[0] if errors else "请确认列序：学号、姓名、寝室号、角色"))
-        cls = simpledialog.askstring(
-            "班级设置",
-            f"已解析到 {len(rows)} 名学生。\n\n请输入班级全称（写进周表表头与月表，如：计算机2301）：",
-            parent=self.root)
-        if not cls or not cls.strip():
-            return
-        self._apply_roster_to_template(rows, cls.strip())
+        self._show_drop_import_dialog(target, rows, errors)
+
+    def _show_drop_import_dialog(self, path, rows, errors):
+        """拖入名单后的确认框：识别结果 + 班级名 + 「确定导入」一步完成。"""
+        top = tk.Toplevel(self.root)
+        top.title("拖入名单")
+        top.grab_set()
+        top.resizable(False, False)
+        self._place_dialog(top, 500, 330)
+        wrap = ttk.Frame(top, padding=24)
+        wrap.pack(fill="both", expand=True)
+        ttk.Label(wrap, text=f"已识别 {len(rows)} 名学生",
+                  font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w")
+        ttk.Label(wrap, text=f"文件：{os.path.basename(path)}",
+                  style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        if errors:
+            ttk.Label(wrap, wraplength=440, justify="left", foreground=WARN_C,
+                      text=f"{len(errors)} 行有问题（导入时跳过）：{errors[0]}"
+                           + (" 等" if len(errors) > 1 else "")
+                      ).pack(anchor="w", pady=(6, 0))
+        ttk.Label(wrap, text="班级全称", style="Muted.TLabel").pack(anchor="w", pady=(14, 2))
+        en_cls = ttk.Entry(wrap)
+        en_cls.pack(fill="x")
+        en_cls.insert(0, "" if self.class_name == "未设置班级" else self.class_name)
+        en_cls.focus_set()
+        en_cls.select_range(0, tk.END)
+        ttk.Label(wrap, wraplength=440, style="Muted.TLabel", text=(
+            "班级名写进周表表头与月表；原名单模板导入前会自动备份，"
+            "当前未保存的加减分录入会被清除。")).pack(anchor="w", pady=(10, 0))
+
+        def ok():
+            cls = en_cls.get().strip()
+            if not cls:
+                messagebox.showwarning("拖入名单", "请填写班级全称", parent=top)
+                return
+            top.destroy()
+            self._apply_roster_to_template(rows, cls)
+
+        def cancel():
+            top.destroy()
+
+        btns = ttk.Frame(wrap)
+        btns.pack(fill="x", pady=(16, 0))
+        ttk.Button(btns, text="确定导入", style="Primary.TButton",
+                   command=ok).pack(side="right")
+        ttk.Button(btns, text="取消", command=cancel).pack(side="right", padx=(0, 8))
+        top.bind("<Return>", lambda e: ok())
+        top.bind("<Escape>", lambda e: cancel())
+        top.protocol("WM_DELETE_WINDOW", cancel)
 
     @staticmethod
     def _read_roster_file(path):

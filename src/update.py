@@ -293,7 +293,7 @@ def do_update(zip_path, install_dir, pid, sha_expect, new_ver, restart, no_resta
         log(f"清理旧备份失败（不影响结果）：{exc}")
 
     if not new_ver:
-        m = re.search(r"([\d]+\.){2}[\d]+", os.path.basename(zip_path))
+        m = re.search(r"(\d+\.){3}\d+|(\d+\.){2}\d+", os.path.basename(zip_path))
         new_ver = m.group(0) if m else ""
     info = {"version": new_ver or old_ver,
             "updated_at": datetime.datetime.now().isoformat(timespec="seconds")}
