@@ -9,7 +9,7 @@
 ## 普通用户：安装与更新
 
 1. 到 [Releases](https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases) 下载
-   `德育分自动化系统-安装程序-x.x.x.exe`，双击安装（默认装到用户目录，无需管理员）。
+   `deyufen-setup-x.x.x.exe`，双击安装（默认装到用户目录，无需管理员）。
 2. 首次运行会引导「班级名单」导入：从 Excel 复制（学号、姓名、寝室号、角色）粘贴即可。
 3. 以后有新版本：软件侧边栏「检查更新」→ 自动下载、校验 sha256、替换、重启。
    更新不动 `名单模板.xlsx`、`20XX年X月/`、`更新配置.json`。
