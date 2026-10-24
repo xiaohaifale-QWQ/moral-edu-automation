@@ -1,0 +1,28 @@
+# 可选：打 tag（v*）时在 GitHub 的 Windows runner 上自动构建并上传 Release 资产。
+# 说明：主程序依赖仓库里的 tkwebui/ 与真实模板之外的资源较少，此工作流构建
+# 的是「源码透明」产物；正式分发包仍建议在本机按 README 的 SOP 打（含空白模板）。
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyinstaller openpyxl pandas
+      - name: Build
+        run: |
+          python -m PyInstaller --clean --noconfirm "软件说明/德育分自动化系统.spec"
+          Compress-Archive -Path "软件说明/dist/德育分自动化系统/*" -DestinationPath "deyufen-${{ github.ref_name }}-srcbuild.zip"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: deyufen-${{ github.ref_name }}-srcbuild.zip
