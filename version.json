@@ -1,14 +1,14 @@
 {
-  "version": "1.8.1",
-  "notes": "1. 名单模板 xlsx/csv 可直接拖进窗口导入（填一次班级名即可）\n2. 换掉窗口羽毛图标，启用程序专属图标\n3. 修复：启动自动检查更新每次都会执行",
+  "version": "1.8.2",
+  "notes": "1. 寝室统计页合并显示：AI 写入的寝室记录直接挂在对应寝室卡片下（青色=AI，橙色=相似度匹配，点击可改），不再单独成区\n2. 名单没有寝室号时显示引导提示",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.1/deyufen-1.8.1-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.1/deyufen-1.8.1-win64.zip",
-      "sha256": "fb5d283eea6712b18f07ac935309256df67df3261f14a395f0405912d01e9b0a",
-      "size": 110611528
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.2/deyufen-1.8.2-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.2/deyufen-1.8.2-win64.zip",
+      "sha256": "b73f78ca9994ccc84d8236e1355099b64f9f426e85e0912a4b283c6f44094834",
+      "size": 110611348
     }
   }
 }

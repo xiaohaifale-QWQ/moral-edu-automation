@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.8.2"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -981,61 +981,15 @@ class MoralScoreApp:
 
         ttk.Button(bar, text="返回周表", command=self.show_week_view).pack(side="right")
 
-        # ========== 底部：AI 写入的寝室记录（先按底部占位，星级列表用剩下的空间） ==========
-        ai_card = SectionCard(self.frame_dorm,
-                              text="AI 写入的寝室记录（点一行可改，不用再点「应用打分」）")
-        self.dorm_ai_card = ai_card
-        # 平时不占地方：只有真的收到寝室相关 AI 记录时才出现
-        ai_card.pack(side="bottom", fill="x", pady=(10, 0))
-
-        ai_head = ttk.Frame(ai_card)
-        ai_head.pack(fill="x", pady=(6, 0))
-        for col, (text, anchor) in enumerate((
-                ("学号后两位", "w"), ("姓名", "w"),
-                ("加减分", "center"), ("明细", "w"), ("", "center"))):
-            ttk.Label(ai_head, text=text, style="Muted.TLabel", anchor=anchor).grid(
-                row=0, column=col, sticky="ew", padx=(12 if col == 0 else 6, 6))
-            ai_head.grid_columnconfigure(col, minsize=self.AI_COL_WIDTHS[col])
-        ai_head.grid_columnconfigure(len(self.AI_COL_WIDTHS), weight=1)
-
-        ttk.Separator(ai_card, orient="horizontal").pack(fill="x", pady=(4, 0))
-
-        # 图例：默认隐藏，出现对应类型的记录才显示
-        self.dorm_ai_legend = ttk.Label(
-            ai_card, foreground=WARN_C,
-            text="橙色行 = 姓名是按相似度猜的，请核对「原文」那几个人对不对")
-        self.dorm_ai_legend_auto = ttk.Label(
-            ai_card, foreground=ACCENT,
-            text="青色分值 = 你没有说分数，程序按模板「加分预览」自动算的，点该行可改")
-
-        dorm_wrap = ttk.Frame(ai_card)
-        self.dorm_ai_wrap = dorm_wrap
-        dorm_wrap.pack(fill="both", expand=True, pady=(4, 0))
-        from tkwebui.core import PALETTE
-        self.dorm_ai_canvas = tk.Canvas(dorm_wrap, height=84, highlightthickness=0,
-                                        borderwidth=0, bg=PALETTE["bg"])
-        dorm_bar = ttk.Scrollbar(dorm_wrap, orient="vertical",
-                                 command=self.dorm_ai_canvas.yview)
-        self.dorm_ai_rows = ttk.Frame(self.dorm_ai_canvas)
-        dorm_win = self.dorm_ai_canvas.create_window((0, 0), window=self.dorm_ai_rows,
-                                                     anchor="nw")
-        self.dorm_ai_rows.bind("<Configure>", lambda e: self.dorm_ai_canvas.configure(
-            scrollregion=self.dorm_ai_canvas.bbox("all")))
-        self.dorm_ai_canvas.bind("<Configure>", lambda e: self.dorm_ai_canvas.itemconfigure(
-            dorm_win, width=e.width))
-        self.dorm_ai_canvas.configure(yscrollcommand=dorm_bar.set)
-        self.dorm_ai_canvas.pack(side="left", fill="both", expand=True)
-        dorm_bar.pack(side="right", fill="y")
-        self.dorm_ai_rows.grid_columnconfigure(0, weight=1)
-
-        self.dorm_ai_empty = ttk.Label(ai_card, style="Muted.TLabel", text="")
-        self._rebuild_dorm_ai_rows()
-
-        # ========== 主体：寝室星级评定 ==========
+        # AI 写入的寝室记录不再单独成区：直接内嵌在对应寝室卡片下方
+        # （青色 = AI 写入，橙色 = AI 按相似度匹配，点一条可直接修改），
+        # 由 _rebuild_dorm_ai_rows 就地刷新。
         self.dorm_stars = {}
         self.dorm_controls = {}
+        self.dorm_ai_boxes = {}      # 寝室号 → AI 记录容器
 
-        left_card = SectionCard(self.frame_dorm, text="寝室星级评定")
+        # ========== 主体：寝室星级评定 ==========
+        left_card = SectionCard(self.frame_dorm, text="寝室星级评定（青色 = AI 写入的记录，点击可改）")
         self.dorm_left_card = left_card
         left_card.pack(fill="both", expand=True)
 
@@ -1080,6 +1034,7 @@ class MoralScoreApp:
         for col in range(columns):
             sf.columnconfigure(col, weight=1, uniform="dorm")
 
+        self.dorm_ai_boxes.clear()
         for idx, dorm in enumerate(sorted(set(self.dorm_map.values()))):
             row, col = divmod(idx, columns)
             cell = ttk.Frame(sf)
@@ -1091,6 +1046,15 @@ class MoralScoreApp:
                                    command=lambda star, d=dorm: self._set_dorm_star(d, star))
             seg.pack(side="left")
             self.dorm_controls[dorm] = seg
+            ai_box = ttk.Frame(cell)
+            ai_box.pack(fill="x")
+            self.dorm_ai_boxes[dorm] = ai_box
+
+        if not self.dorm_stars:
+            ttk.Label(sf, wraplength=560, style="Muted.TLabel", text=(
+                "名单里还没有寝室信息——在「班级名单」里导入含寝室号的名单后，\n"
+                "这里会显示每个寝室的星级卡片；AI 写入的寝室记录也会直接挂在自己寝室下面。"
+            )).grid(row=0, column=0, columnspan=columns, sticky="w", padx=12, pady=28)
 
     # ---------------- 第四页：AI 连接（MCP） ----------------
     def setup_ai_view(self):
@@ -1438,31 +1402,30 @@ class MoralScoreApp:
                              self._collect_ai_rows())
 
     def _rebuild_dorm_ai_rows(self):
-        """重画寝室统计页的「AI 写入的寝室记录」。
+        """把 AI 写入的寝室记录就地合并进各寝室卡片（不再单独成区）。
 
-        没有寝室相关的 AI 记录时整块卡片收起，把空间留给星级列表；
-        一旦收到（或切到该页时存在）才显示出来。
+        每条记录挂在自己寝室的星级卡片下方：
+          青色 = AI 写入；橙色 = AI 按姓名相似度匹配（请核对）。
+        点一条可直接进入该记录的修改框。没有记录的寝室保持干净。
         """
-        if not hasattr(self, "dorm_ai_rows"):
+        if not hasattr(self, "dorm_ai_boxes"):
             return
-        rows = self._collect_ai_rows(only_dorm=True)
-        card = getattr(self, "dorm_ai_card", None)
-        if card is not None:
-            if rows:
-                if not card.winfo_ismapped():
-                    # 必须插在星级卡片之前：pack 的先后决定空间分配的优先级，
-                    # 直接 pack 会排到最后，星级卡片（expand）会把这块挤扁。
-                    left = getattr(self, "dorm_left_card", None)
-                    if left is not None:
-                        card.pack(side="bottom", fill="x", pady=(10, 0), before=left)
-                    else:
-                        card.pack(side="bottom", fill="x", pady=(10, 0))
-            else:
-                card.pack_forget()
-        self._render_ai_rows(self.dorm_ai_rows, self.dorm_ai_wrap,
-                             (self.dorm_ai_legend, self.dorm_ai_legend_auto),
-                             self.dorm_ai_empty, rows,
-                             empty_text="当前周期还没有 AI 写入的寝室记录。")
+        per_dorm = {}
+        for r in self._collect_ai_rows(only_dorm=True):
+            dorm = self.week_data.get(r["sid"], {}).get("dorm", "")
+            per_dorm.setdefault(dorm, []).append(r)
+
+        for dorm, box in self.dorm_ai_boxes.items():
+            for w in box.winfo_children():
+                w.destroy()
+            for r in per_dorm.get(dorm, []):
+                color = WARN_C if r["fuzzy"] else ACCENT
+                txt = f"AI·{r['name']}({r['tail']})  {r['reason']}  {signed_text(r['score'])}"
+                item = ttk.Label(box, text=txt, foreground=color,
+                                 font=("Microsoft YaHei UI", 9), cursor="hand2")
+                item.pack(anchor="w")
+                item.bind("<Button-1>",
+                          lambda e, sid=r["sid"], idx=r["idx"]: self._edit_ai_record(sid, idx))
 
     def _refresh_after_ai_change(self):
         """AI 记录被改/被驳回后，同步刷新所有界面。"""
