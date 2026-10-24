@@ -1,14 +1,14 @@
 {
-  "version": "1.9.0.1",
-  "notes": "1. 设置改为左侧模块按钮（名单模板 / 版本与更新 / AI 对接），底不再被裁掉\n2. 「添加模板」选完文件直接替换当前模板（自动备份，不再弹确认框）\n3. 新增「打开模板编辑」：用 Excel 直接打开 名单模板.xlsx 填写，改完点「刷新模板」生效\n4. 删除开局弹窗：空白名单启动不再打扰",
+  "version": "1.9.0.2",
+  "notes": "1. 修复：设置里点「添加模板」文件选择框没弹出来（被设置框压在背后）——现在正确弹出并默认打开程序目录\n2. 侧边栏「设置」按钮改为长方形条",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.1/deyufen-1.9.0.1-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.1/deyufen-1.9.0.1-win64.zip",
-      "sha256": "7600aaa1a0ca67a562921838a0f24cb61f81565b87f609de7b510ec5b848f5f7",
-      "size": 110617834
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.2/deyufen-1.9.0.2-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.2/deyufen-1.9.0.2-win64.zip",
+      "sha256": "3d1551f64212dbceca40bb50899b84ebc5afde23f8d3ce67fca62cc65c563e3b",
+      "size": 110618631
     }
   }
 }

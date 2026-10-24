@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.0.1"
+APP_VERSION = "1.9.0.2"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -175,6 +175,15 @@ def configure_app_styles(root):
                 font=("Microsoft YaHei UI", 9))
     s.configure("SidebarWarning.TLabel", background=sidebar_bg, foreground=WARN_C,
                 font=("Microsoft YaHei UI", 9))
+    # 侧边栏「设置」按钮：直角长方形条（不用主题的圆角贴图），横向填满
+    s.configure("SidebarRect.TButton", background=sidebar_bg, foreground=INK,
+                font=("Microsoft YaHei UI", 10), padding=(10, 8), anchor="center",
+                borderwidth=0, relief="flat")
+    s.layout("SidebarRect.TButton",
+             [("Button.label", {"sticky": "nsew", "expand": True})])
+    s.map("SidebarRect.TButton",
+          background=[("disabled", sidebar_bg), ("pressed", HILITE), ("active", "#E4F2EF")],
+          foreground=[("disabled", MUTED)])
     s.configure("Success.TLabel", foreground=OK_C)
     s.configure("Warning.TLabel", foreground=WARN_C)
     s.configure("Danger.TLabel", foreground=ERR_C)
@@ -567,8 +576,9 @@ class MoralScoreApp:
                                      style="SidebarMuted.TLabel")
         self.lbl_version.pack(anchor="w")
         self.btn_settings = ttk.Button(side_foot, text="设置",
+                                       style="SidebarRect.TButton",
                                        command=self.show_settings_dialog)
-        self.btn_settings.pack(anchor="w", pady=(6, 0))
+        self.btn_settings.pack(fill="x", pady=(6, 0))
 
         self.nav.pack(fill="both", expand=True)
 
@@ -713,11 +723,18 @@ class MoralScoreApp:
                 + (errors[0] if errors else "请确认列序：学号、姓名、寝室号、角色"))
         self._show_drop_import_dialog(target, rows, errors, cls_hint)
 
-    def pick_roster_file(self):
-        """设置里的「添加模板」：选完文件直接替换当前模板（自动备份，不弹确认）。"""
-        path = filedialog.askopenfilename(
-            self.root, title="选择 名单模板.xlsx 或名单文件",
-            filetypes=[("名单文件", "*.xlsx *.csv"), ("所有文件", "*.*")])
+    def pick_roster_file(self, parent=None):
+        """设置里的「添加模板」：选完文件直接替换当前模板（自动备份，不弹确认）。
+
+        parent 必须用关键字传（挂到设置框上，文件选择框才弹在它上面、
+        不会被独占焦点的设置框压在背后）；默认打开程序目录，名单模板就在那里。
+        """
+        kwargs = dict(title="选择 名单模板.xlsx 或名单文件",
+                      filetypes=[("名单文件", "*.xlsx *.csv"), ("所有文件", "*.*")],
+                      initialdir=self._base_dir())
+        if parent is not None:
+            kwargs["parent"] = parent
+        path = filedialog.askopenfilename(**kwargs)
         if not path:
             return
         try:
@@ -2645,7 +2662,7 @@ class MoralScoreApp:
         row1 = ttk.Frame(p1)
         row1.pack(fill="x", pady=(14, 0))
         ttk.Button(row1, text="添加模板…", style="Primary.TButton",
-                   command=self.pick_roster_file).pack(side="left")
+                   command=lambda: self.pick_roster_file(parent=top)).pack(side="left")
         ttk.Button(row1, text="打开模板编辑",
                    command=self.open_template_file).pack(side="left", padx=(8, 0))
         ttk.Label(p1, wraplength=470, justify="left", style="Muted.TLabel", text=(
