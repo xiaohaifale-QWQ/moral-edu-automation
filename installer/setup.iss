@@ -12,7 +12,7 @@
 ;     卸载完成后用户数据仍在（Inno 默认会删它自己装过的 名单模板.xlsx，必须绕）
 
 #define MyAppName "德育分自动化系统"
-#define MyAppVersion "1.8.0"
+#define MyAppVersion "1.8.1"
 #define MyAppExeName "德育分自动化系统.exe"
 #define MyAppId "{{8E7C1A52-7F3B-4C21-9A55-1D2C7B0E4F11}"
 

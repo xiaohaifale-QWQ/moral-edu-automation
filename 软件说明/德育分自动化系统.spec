@@ -6,18 +6,18 @@ torch / paddle / cv2 / whisper / sounddevice，
 这里显式排除掉，产物体积能小一大截。
 """
 
+from PyInstaller.utils.hooks import collect_data_files
 
-def collect_data_files(package):
-    """把包内需要随程序分发的数据文件收集出来（tkwebui 目前没有，留作扩展）。"""
-    return []
+# tkinterdnd2：拖拽支持（名单模板拖进窗口导入），必须带上它自带的 tkdnd 二进制
+TKDND_DATAS = collect_data_files('tkinterdnd2')
 
 
 a = Analysis(
     ['德育分自动化系统.py'],
     pathex=[],
     binaries=[],
-    datas=collect_data_files('tkwebui'),
-    hiddenimports=['pandas', 'openpyxl', 'tkwebui'],
+    datas=[('doro.ico', '.')] + TKDND_DATAS,
+    hiddenimports=['pandas', 'openpyxl', 'tkwebui', 'tkinterdnd2'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

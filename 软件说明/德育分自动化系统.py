@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import ast
 import hashlib
 import json
@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.8.1"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -623,6 +623,119 @@ class MoralScoreApp:
         self.setup_month_view()
         self.setup_ai_view()
         self.show_week_view()
+        self._set_window_icon()
+        self._enable_drag_drop()
+
+    def _set_window_icon(self):
+        """标题栏/任务栏用程序自己的图标（不设的话 Windows 会显示 Tk 默认羽毛）。"""
+        if getattr(sys, "frozen", False):
+            base = getattr(sys, "_MEIPASS", None) or \
+                os.path.dirname(os.path.abspath(sys.executable))
+            path = os.path.join(base, "doro.ico")
+            if not os.path.exists(path):
+                path = os.path.join(os.path.dirname(os.path.abspath(sys.executable)),
+                                    "doro.ico")
+        else:
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "doro.ico")
+        try:
+            if os.path.exists(path):
+                self.root.iconbitmap(path)
+        except Exception:
+            pass
+
+    def _enable_drag_drop(self):
+        """把名单模板 xlsx/csv 拖进窗口即可导入。
+
+        依赖 tkinterdnd2（打包时已内置）；源码环境没装或 tkdnd 没加载成功
+        就静默跳过，其余功能不受影响。
+        """
+        try:
+            from tkinterdnd2 import DND_FILES
+        except ImportError:
+            return
+        targets = [self.root, self.body, self.frame_week, self.frame_month,
+                   self.frame_dorm, self.frame_ai,
+                   getattr(self, "tree_week", None), getattr(self, "tree_month", None)]
+        for w in targets:
+            if w is None:
+                continue
+            try:
+                w.drop_target_register(DND_FILES)
+                w.bind("<<Drop>>", self._handle_dropped_files)
+            except Exception:
+                pass
+
+    def _handle_dropped_files(self, event):
+        """拖入名单文件 → 确认 → 填班级名 → 走现成的写模板/重载流程。"""
+        try:
+            paths = [str(p) for p in self.root.tk.splitlist(event.data)]
+        except Exception:
+            return
+        target = next((p for p in paths if str(p).lower().endswith((".xlsx", ".csv"))), None)
+        if not target or not os.path.exists(target):
+            return      # 拖进来的不是名单文件：不弹窗不打扰
+        if not messagebox.askyesno(
+                "导入名单",
+                f"把「{os.path.basename(target)}」作为班级名单导入吗？\n\n"
+                f"导入会覆盖模板里现有名单（原文件先自动备份），\n"
+                f"当前未保存的加减分录入会被清除。"):
+            return
+        try:
+            parts_list = self._read_roster_file(target)
+        except Exception as exc:
+            return messagebox.showerror("读取失败", f"{target}\n\n{exc}")
+        rows, errors = self._parse_roster_parts(parts_list)
+        if not rows:
+            return messagebox.showwarning(
+                "名单为空",
+                "没能从文件里解析出名单。\n"
+                + (errors[0] if errors else "请确认列序：学号、姓名、寝室号、角色"))
+        cls = simpledialog.askstring(
+            "班级设置",
+            f"已解析到 {len(rows)} 名学生。\n\n请输入班级全称（写进周表表头与月表，如：计算机2301）：",
+            parent=self.root)
+        if not cls or not cls.strip():
+            return
+        self._apply_roster_to_template(rows, cls.strip())
+
+    @staticmethod
+    def _read_roster_file(path):
+        """读名单文件为分列文本（xlsx 用第一张表，csv 按 , \\t ，；切）。"""
+        if path.lower().endswith(".csv"):
+            with open(path, "r", encoding="utf-8-sig") as f:
+                return [re.split(r"[\t,，;；]+", ln) for ln in f.read().splitlines()]
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        try:
+            ws = wb.worksheets[0]
+            return [list(row[:4]) for row in ws.iter_rows(values_only=True)]
+        finally:
+            wb.close()
+
+    @staticmethod
+    def _parse_roster_parts(parts_list):
+        """名单校验：学号 8~12 位唯一、姓名非空、角色只能是 成员/室长。"""
+        rows, errors, seen = [], [], set()
+        for parts in parts_list:
+            parts = [str(p).strip() for p in parts if str(p).strip()]
+            if not parts:
+                continue
+            if parts[0].lower() in ("学号", "sid", "id"):   # 表头行
+                continue
+            if len(parts) < 2:
+                errors.append(f"行「{' '.join(parts)}」列数不足")
+                continue
+            sid, name = parts[0], parts[1]
+            dorm = parts[2] if len(parts) > 2 else ""
+            role = "室长" if "长" in (parts[3] if len(parts) > 3 else "") else "成员"
+            if not re.fullmatch(r"\d{8,12}", sid):
+                errors.append(f"学号「{sid}」不是 8~12 位数字")
+                continue
+            if sid in seen:
+                errors.append(f"学号「{sid}」重复")
+                continue
+            seen.add(sid)
+            rows.append({"sid": sid, "name": name, "dorm": dorm, "role": role})
+        return rows, errors
 
     def _all_frames(self):
         return (self.frame_week, self.frame_month, self.frame_dorm, self.frame_ai)
@@ -1866,27 +1979,8 @@ class MoralScoreApp:
 
         def validate(parts_list, source):
             rows.clear()
-            errors, seen = [], set()
-            for parts in parts_list:
-                parts = [str(p).strip() for p in parts if str(p).strip()]
-                if not parts:
-                    continue
-                if parts[0].lower() in ("学号", "sid", "id"):   # 表头行
-                    continue
-                if len(parts) < 2:
-                    errors.append(f"{source}行「{' '.join(parts)}」列数不足")
-                    continue
-                sid, name = parts[0], parts[1]
-                dorm = parts[2] if len(parts) > 2 else ""
-                role = "室长" if "长" in (parts[3] if len(parts) > 3 else "") else "成员"
-                if not re.fullmatch(r"\d{8,12}", sid):
-                    errors.append(f"学号「{sid}」不是 8~12 位数字")
-                    continue
-                if sid in seen:
-                    errors.append(f"学号「{sid}」重复")
-                    continue
-                seen.add(sid)
-                rows.append({"sid": sid, "name": name, "dorm": dorm, "role": role})
+            parsed, errors = self._parse_roster_parts(parts_list)
+            rows.extend(parsed)
             render()
             msg = f"解析到 {len(rows)} 人"
             if errors:
@@ -1905,14 +1999,7 @@ class MoralScoreApp:
             if not path:
                 return
             try:
-                if path.lower().endswith(".csv"):
-                    with open(path, "r", encoding="utf-8-sig") as f:
-                        parts_list = [re.split(r"[\t,，;；]+", ln) for ln in f.read().splitlines()]
-                else:
-                    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
-                    ws = wb.worksheets[0]
-                    parts_list = [list(row[:4]) for row in ws.iter_rows(values_only=True)]
-                    wb.close()
+                parts_list = self._read_roster_file(path)
             except Exception as exc:
                 messagebox.showerror("读取失败", f"{path}\n\n{exc}", parent=top)
                 return
@@ -3404,7 +3491,12 @@ class MoralScoreApp:
 
 if __name__ == "__main__":
     enable_dpi_awareness()
-    root = tk.Tk()
+    try:
+        # TkinterDnD 根窗口：支持把名单模板 xlsx/csv 拖进窗口导入
+        from tkinterdnd2 import TkinterDnD
+        root = TkinterDnD.Tk()
+    except Exception:
+        root = tk.Tk()          # 没有拖拄件时功能照常，只是不支持拖入
     apply_theme(root, accent=ACCENT, accent_hover=ACCENT_HOVER)
     configure_app_styles(root)
     app = MoralScoreApp(root)
