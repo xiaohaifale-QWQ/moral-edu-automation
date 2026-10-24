@@ -1,14 +1,14 @@
 {
-  "version": "1.9.0.2",
-  "notes": "1. 修复：设置里点「添加模板」文件选择框没弹出来（被设置框压在背后）——现在正确弹出并默认打开程序目录\n2. 侧边栏「设置」按钮改为长方形条",
+  "version": "1.9.0.3",
+  "notes": "1. 设置界面翻新：左侧模块导航（选中高亮+指示条）、右侧白底描边卡片\n2. 侧边栏「设置」按钮加边框，悬停有反馈",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.2/deyufen-1.9.0.2-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.2/deyufen-1.9.0.2-win64.zip",
-      "sha256": "3d1551f64212dbceca40bb50899b84ebc5afde23f8d3ce67fca62cc65c563e3b",
-      "size": 110618631
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.3/deyufen-1.9.0.3-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.3/deyufen-1.9.0.3-win64.zip",
+      "sha256": "3564cc47fb99764bb00d1ee037e1089ee6859e9b38b8a6ca1f7883e3785ecd08",
+      "size": 110620488
     }
   }
 }

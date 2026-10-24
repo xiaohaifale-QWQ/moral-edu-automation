@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.0.2"
+APP_VERSION = "1.9.0.3"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -175,15 +175,6 @@ def configure_app_styles(root):
                 font=("Microsoft YaHei UI", 9))
     s.configure("SidebarWarning.TLabel", background=sidebar_bg, foreground=WARN_C,
                 font=("Microsoft YaHei UI", 9))
-    # 侧边栏「设置」按钮：直角长方形条（不用主题的圆角贴图），横向填满
-    s.configure("SidebarRect.TButton", background=sidebar_bg, foreground=INK,
-                font=("Microsoft YaHei UI", 10), padding=(10, 8), anchor="center",
-                borderwidth=0, relief="flat")
-    s.layout("SidebarRect.TButton",
-             [("Button.label", {"sticky": "nsew", "expand": True})])
-    s.map("SidebarRect.TButton",
-          background=[("disabled", sidebar_bg), ("pressed", HILITE), ("active", "#E4F2EF")],
-          foreground=[("disabled", MUTED)])
     s.configure("Success.TLabel", foreground=OK_C)
     s.configure("Warning.TLabel", foreground=WARN_C)
     s.configure("Danger.TLabel", foreground=ERR_C)
@@ -575,10 +566,30 @@ class MoralScoreApp:
         self.lbl_version = ttk.Label(side_foot, text=f"v{APP_VERSION}",
                                      style="SidebarMuted.TLabel")
         self.lbl_version.pack(anchor="w")
-        self.btn_settings = ttk.Button(side_foot, text="设置",
-                                       style="SidebarRect.TButton",
-                                       command=self.show_settings_dialog)
-        self.btn_settings.pack(fill="x", pady=(6, 0))
+        # 设置按钮：带边框的长方形条（外层 1px 描边 + 悬停浅青）
+        from tkwebui.core import PALETTE
+        _sb = PALETTE["sidebar"]
+        set_edge = tk.Frame(side_foot, bg="#C9D4D0", padx=1, pady=1)
+        set_edge.pack(fill="x", pady=(6, 0))
+        set_inner = tk.Frame(set_edge, bg=_sb)
+        set_inner.pack(fill="both", expand=True)
+        self.btn_settings = tk.Label(
+            set_inner, text="设  置", bg=_sb, fg=INK,
+            font=("Microsoft YaHei UI", 10), pady=7, cursor="hand2")
+        self.btn_settings.pack(fill="x")
+
+        def _settings_hover(e):
+            self.btn_settings.config(bg="#E7F2F0")
+            set_inner.config(bg="#E7F2F0")
+
+        def _settings_leave(e):
+            self.btn_settings.config(bg=_sb)
+            set_inner.config(bg=_sb)
+
+        self.btn_settings.bind("<Button-1>",
+                               lambda e: self.show_settings_dialog())
+        self.btn_settings.bind("<Enter>", _settings_hover)
+        self.btn_settings.bind("<Leave>", _settings_leave)
 
         self.nav.pack(fill="both", expand=True)
 
@@ -2626,37 +2637,88 @@ class MoralScoreApp:
         self.root.destroy()
 
     def show_settings_dialog(self):
-        """左下角「设置」：左侧模块按钮，右侧显示对应面板。"""
+        """左下角「设置」：左侧模块导航，右侧内容卡片。"""
+        # ── 外观常量（主题色）──
+        from tkwebui.core import PALETTE
+        PAGE_BG = PALETTE["bg"]          # 白
+        EDGE = PALETTE["border"]         # 卡片描边
+        HOVER = "#EDF6F3"                # 悬停浅青
+        SEL_BG = "#DCEEEA"               # 选中底色
+        SEL_FG = "#0B7A70"               # 选中文字（主题青绿）
+
         top = tk.Toplevel(self.root)
         top.title("设置")
         top.grab_set()
         top.resizable(False, False)
-        self._place_dialog(top, 680, 470)
-        body = ttk.Frame(top, padding=18)
+        self._place_dialog(top, 700, 480)
+        body = ttk.Frame(top, padding=20)
         body.pack(fill="both", expand=True)
 
-        nav = ttk.Frame(body)
-        nav.pack(side="left", fill="y", padx=(0, 18))
-        content = ttk.Frame(body)
-        content.pack(side="left", fill="both", expand=True)
+        # ── 左：模块导航（直角条目 + 选中指示条）──
+        nav_edge = tk.Frame(body, bg=EDGE, padx=1, pady=1)
+        nav_edge.pack(side="left", fill="y")
+        nav = tk.Frame(nav_edge, bg=PAGE_BG)
+        nav.pack(fill="both", expand=True)
+        nav_items = {}
 
-        panels, nav_btns = {}, {}
+        # ── 右：内容卡片（白底描边）──
+        card_edge = tk.Frame(body, bg=EDGE, padx=1, pady=1)
+        card_edge.pack(side="left", fill="both", expand=True, padx=(16, 0))
+        card = tk.Frame(card_edge, bg=PAGE_BG)
+        card.pack(fill="both", expand=True)
+
+        panels = {}
+        current = {"key": None}
+
+        def paint(key, state):
+            it = nav_items[key]
+            if state == "sel":
+                bg, fg, bold = SEL_BG, SEL_FG, True
+            elif state == "hover":
+                bg, fg, bold = HOVER, INK, False
+            else:
+                bg, fg, bold = PAGE_BG, INK, False
+            font = ("Microsoft YaHei UI", 10, "bold") if bold else ("Microsoft YaHei UI", 10)
+            it["row"].config(bg=bg)
+            it["lab"].config(bg=bg, fg=fg, font=font)
+            it["ind"].config(bg=SEL_FG if state == "sel" else bg)
 
         def show(key):
-            for p in panels.values():
+            current["key"] = key
+            for k, p in panels.items():
                 p.pack_forget()
-            panels[key].pack(fill="both", expand=True)
-            for k, b in nav_btns.items():
-                b.config(style="Primary.TButton" if k == key else "TButton")
+                paint(k, "sel" if k == key else "base")
+            panels[key].pack(fill="both", expand=True, padx=16, pady=14)
 
         def add_nav(key, label):
-            b = ttk.Button(nav, text=label, style="TButton",
-                           command=lambda: show(key))
-            b.pack(fill="x", pady=(0, 8))
-            nav_btns[key] = b
+            row = tk.Frame(nav, bg=PAGE_BG, cursor="hand2")
+            row.pack(fill="x")
+            ind = tk.Frame(row, bg=PAGE_BG, width=3)
+            ind.pack(side="left", fill="y")
+            ind.pack_propagate(False)
+            lab = tk.Label(row, text="  " + label + "   ", bg=PAGE_BG, fg=INK,
+                           font=("Microsoft YaHei UI", 10), pady=10, anchor="w")
+            lab.pack(side="left", fill="x", expand=True)
+
+            def on_click(e=None):
+                show(key)
+
+            def on_enter(e):
+                if current["key"] != key:
+                    paint(key, "hover")
+
+            def on_leave(e):
+                if current["key"] != key:
+                    paint(key, "base")
+
+            for w in (row, lab):
+                w.bind("<Button-1>", on_click)
+                w.bind("<Enter>", on_enter)
+                w.bind("<Leave>", on_leave)
+            nav_items[key] = {"row": row, "lab": lab, "ind": ind}
 
         # ── 面板：名单模板 ──
-        p1 = ttk.Frame(content)
+        p1 = tk.Frame(card, bg=PAGE_BG)
         panels["roster"] = p1
         ttk.Label(p1, text="名单模板", style="CardTitle.TLabel").pack(anchor="w")
         row1 = ttk.Frame(p1)
@@ -2666,13 +2728,13 @@ class MoralScoreApp:
         ttk.Button(row1, text="打开模板编辑",
                    command=self.open_template_file).pack(side="left", padx=(8, 0))
         ttk.Label(p1, wraplength=470, justify="left", style="Muted.TLabel", text=(
-            "「添加模板」选 名单模板.xlsx（自动带出班级/寝室/室长）或四列名单文件，\n"
-            "选好即替换当前模板（原文件自动备份）；也可以把文件直接拖进主窗口。\n\n"
-            "「打开模板编辑」用 Excel 打开 名单模板.xlsx，改完保存并关闭 Excel，\n"
+            "「添加模板」选 名单模板.xlsx（自动带出班级/寝室/室长）或四列名单文件，\\n"
+            "选好即替换当前模板（原文件自动备份）；也可以把文件直接拖进主窗口。\\n\\n"
+            "「打开模板编辑」用 Excel 打开 名单模板.xlsx，改完保存并关闭 Excel，\\n"
             "再点周表页的「刷新模板」生效。")).pack(anchor="w", pady=(14, 0))
 
         # ── 面板：版本与更新 ──
-        p2 = ttk.Frame(content)
+        p2 = tk.Frame(card, bg=PAGE_BG)
         panels["update"] = p2
         cfg = self._update_config()
         ttk.Label(p2, text=f"当前版本 v{APP_VERSION}",
@@ -2695,7 +2757,7 @@ class MoralScoreApp:
         e2.pack(fill="x")
         e2.insert(0, cfg.get("mirror_url") or "")
         ttk.Label(p2, wraplength=470, style="Muted.TLabel", text=(
-            "国内网络打不开 GitHub 时，可把镜像换成加速地址，例如\n"
+            "国内网络打不开 GitHub 时，可把镜像换成加速地址，例如\\n"
             "https://ghfast.top/https://raw.githubusercontent.com/…/version.json")).pack(
             anchor="w", pady=(10, 0))
 
@@ -2719,7 +2781,7 @@ class MoralScoreApp:
             side="right", padx=(0, 8))
 
         # ── 面板：AI 对接 ──
-        p3 = ttk.Frame(content)
+        p3 = tk.Frame(card, bg=PAGE_BG)
         panels["ai"] = p3
         ttk.Label(p3, text="AI 对接（MCP）", style="CardTitle.TLabel").pack(anchor="w")
         row_ai = ttk.Frame(p3)
@@ -2731,8 +2793,8 @@ class MoralScoreApp:
         ttk.Button(row_ai, text="打开文件夹",
                    command=self._open_ai_folder).pack(side="left", padx=(8, 0))
         ttk.Label(p3, wraplength=470, justify="left", style="Muted.TLabel", text=(
-            "在 AI 客户端（Cherry Studio / Claude Desktop 等）里添加\n"
-            "AI对接\\MCP配置.json 的内容即可。挪动安装目录或重装后，\n"
+            "在 AI 客户端（Cherry Studio / Claude Desktop 等）里添加\\n"
+            "AI对接\\\\MCP配置.json 的内容即可。挪动安装目录或重装后，\\n"
             "点「重新生成 MCP 配置」按实际路径重写。")).pack(anchor="w", pady=(14, 0))
 
         add_nav("roster", "名单模板")
