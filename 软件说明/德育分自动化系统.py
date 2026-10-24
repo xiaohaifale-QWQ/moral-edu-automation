@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.4.0"
+APP_VERSION = "1.9.0.1"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -533,21 +533,9 @@ class MoralScoreApp:
         self._sync_dorm_stars()   # 启动时把该周期的星级还原出来
         self._init_ai_bridge()    # 开始接收 AI（MCP）排入的记录
 
-        # 主界面稳定后静默检查更新（有新版本才弹窗，失败静默）
+        # 主界面稳定后静默检查更新（有新版本才弹窗，失败静默）。
+        # 名单为空不再弹窗打扰，侧边栏与状态栏的提示足以引导。
         self.root.after(3000, lambda: self._check_update(manual=False))
-        # 空白模板首次启动：引导导入名单
-        if not self.week_data:
-            self.root.after(800, self._first_run_guide)
-
-    def _first_run_guide(self):
-        """空白模板第一次打开：名单是空的，主动引导走「班级名单」导入。"""
-        if self.week_data:
-            return
-        if messagebox.askyesno(
-                "导入班级名单",
-                "当前名单是空的（空白模板）。\n\n现在就导入班级名单吗？\n"
-                "可以直接从 Excel 复制粘贴，也可以选 .xlsx / .csv 文件。"):
-            self.show_roster_dialog()
 
     def setup_ui(self):
         shell = ttk.Frame(self.root)
@@ -726,7 +714,7 @@ class MoralScoreApp:
         self._show_drop_import_dialog(target, rows, errors, cls_hint)
 
     def pick_roster_file(self):
-        """设置里的「添加模板」：选文件 → 走与拖入完全相同的导入流程。"""
+        """设置里的「添加模板」：选完文件直接替换当前模板（自动备份，不弹确认）。"""
         path = filedialog.askopenfilename(
             self.root, title="选择 名单模板.xlsx 或名单文件",
             filetypes=[("名单文件", "*.xlsx *.csv"), ("所有文件", "*.*")])
@@ -736,7 +724,33 @@ class MoralScoreApp:
             parts_list, cls_hint = self._read_roster_source(path)
         except Exception as exc:
             return messagebox.showerror("读取失败", f"{path}\n\n{exc}")
-        self._import_parsed_roster(path, parts_list, cls_hint)
+        rows, errors = self._parse_roster_parts(parts_list)
+        if not rows:
+            return messagebox.showwarning(
+                "名单为空",
+                "没能从文件里解析出名单。\n"
+                + (errors[0] if errors else
+                   "请确认是 名单模板.xlsx，或 学号/姓名/寝室号/角色 四列名单文件"))
+        cls = cls_hint or (self.class_name if self.class_name != "未设置班级" else "")
+        if not cls:
+            return messagebox.showwarning(
+                "缺少班级名",
+                "文件里没有班级信息，当前也还没设置过班级。\n"
+                "请选带班级名的 名单模板.xlsx，或先用周表页的「班级名单」设置一次。")
+        self._apply_roster_to_template(rows, cls)
+        try:
+            notify(self.root, f"模板已替换：{len(rows)} 人"
+                   + (f"（{len(errors)} 行跳过）" if errors else ""),
+                   title="添加模板", kind="success", duration=8000)
+        except Exception:
+            pass
+
+    def open_template_file(self):
+        """用 Excel 打开 名单模板.xlsx 直接编辑；改完保存并关闭后点「刷新模板」生效。"""
+        path = self._template_path()
+        if not os.path.exists(path):
+            return messagebox.showwarning("找不到模板", f"没有找到：\n{path}")
+        self._open_path(path)
 
     def _show_drop_import_dialog(self, path, rows, errors, cls_hint=""):
         """拖入名单后的确认框：识别结果 + 班级名 + 「确定导入」一步完成。"""
@@ -2595,55 +2609,75 @@ class MoralScoreApp:
         self.root.destroy()
 
     def show_settings_dialog(self):
-        """左下角「设置」对话框：名单模板 / 版本更新 / 更新源 / AI 对接。
-
-        自动检查更新在每次启动后台静默跑（无新版或网络不通都不打扰），
-        这里的「检查更新」是手动触发，无论结果都会给一句提示。
-        """
-        cfg = self._update_config()
+        """左下角「设置」：左侧模块按钮，右侧显示对应面板。"""
         top = tk.Toplevel(self.root)
         top.title("设置")
         top.grab_set()
         top.resizable(False, False)
-        self._place_dialog(top, 560, 620)
-        wrap = ttk.Frame(top, padding=24)
-        wrap.pack(fill="both", expand=True)
+        self._place_dialog(top, 680, 470)
+        body = ttk.Frame(top, padding=18)
+        body.pack(fill="both", expand=True)
 
-        # ── 名单模板 ──
-        ttk.Label(wrap, text="名单模板", style="CardTitle.TLabel").pack(anchor="w")
-        row_t = ttk.Frame(wrap)
-        row_t.pack(fill="x", pady=(10, 0))
-        ttk.Button(row_t, text="添加模板…", style="Primary.TButton",
+        nav = ttk.Frame(body)
+        nav.pack(side="left", fill="y", padx=(0, 18))
+        content = ttk.Frame(body)
+        content.pack(side="left", fill="both", expand=True)
+
+        panels, nav_btns = {}, {}
+
+        def show(key):
+            for p in panels.values():
+                p.pack_forget()
+            panels[key].pack(fill="both", expand=True)
+            for k, b in nav_btns.items():
+                b.config(style="Primary.TButton" if k == key else "TButton")
+
+        def add_nav(key, label):
+            b = ttk.Button(nav, text=label, style="TButton",
+                           command=lambda: show(key))
+            b.pack(fill="x", pady=(0, 8))
+            nav_btns[key] = b
+
+        # ── 面板：名单模板 ──
+        p1 = ttk.Frame(content)
+        panels["roster"] = p1
+        ttk.Label(p1, text="名单模板", style="CardTitle.TLabel").pack(anchor="w")
+        row1 = ttk.Frame(p1)
+        row1.pack(fill="x", pady=(14, 0))
+        ttk.Button(row1, text="添加模板…", style="Primary.TButton",
                    command=self.pick_roster_file).pack(side="left")
-        ttk.Label(row_t, text="选 名单模板.xlsx（自动带出班级/寝室）或四列名单文件；"
-                              "也可以直接拖进主窗口", style="Muted.TLabel").pack(
-            side="left", padx=(12, 0))
-        ttk.Separator(wrap).pack(fill="x", pady=(16, 12))
+        ttk.Button(row1, text="打开模板编辑",
+                   command=self.open_template_file).pack(side="left", padx=(8, 0))
+        ttk.Label(p1, wraplength=470, justify="left", style="Muted.TLabel", text=(
+            "「添加模板」选 名单模板.xlsx（自动带出班级/寝室/室长）或四列名单文件，\n"
+            "选好即替换当前模板（原文件自动备份）；也可以把文件直接拖进主窗口。\n\n"
+            "「打开模板编辑」用 Excel 打开 名单模板.xlsx，改完保存并关闭 Excel，\n"
+            "再点周表页的「刷新模板」生效。")).pack(anchor="w", pady=(14, 0))
 
-        # ── 版本 / 检查更新 ──
-        ttk.Label(wrap, text=f"当前版本 v{APP_VERSION}", style="Strong.TLabel").pack(anchor="w")
-        row_u = ttk.Frame(wrap)
-        row_u.pack(fill="x", pady=(10, 0))
+        # ── 面板：版本与更新 ──
+        p2 = ttk.Frame(content)
+        panels["update"] = p2
+        cfg = self._update_config()
+        ttk.Label(p2, text=f"当前版本 v{APP_VERSION}",
+                  style="CardTitle.TLabel").pack(anchor="w")
+        row_u = ttk.Frame(p2)
+        row_u.pack(fill="x", pady=(14, 0))
         self.btn_check_update = ttk.Button(row_u, text="检查更新",
                                            command=lambda: self._check_update(manual=True))
         self.btn_check_update.pack(side="left")
         ttk.Label(row_u, text="每次启动也会自动检查，无新版或网络不通时不弹窗",
                   style="Muted.TLabel").pack(side="left", padx=(12, 0))
-
-        ttk.Separator(wrap).pack(fill="x", pady=(16, 12))
-
-        # ── 更新源 ──
-        ttk.Label(wrap, text="更新源", style="CardTitle.TLabel").pack(anchor="w")
-        ttk.Label(wrap, text="更新清单地址（主）", style="Muted.TLabel").pack(anchor="w", pady=(8, 2))
-        e1 = ttk.Entry(wrap)
+        ttk.Label(p2, text="更新清单地址（主）", style="Muted.TLabel").pack(
+            anchor="w", pady=(18, 2))
+        e1 = ttk.Entry(p2)
         e1.pack(fill="x")
         e1.insert(0, cfg.get("manifest_url") or "")
-        ttk.Label(wrap, text="更新清单地址（镜像，主地址失败时使用）",
+        ttk.Label(p2, text="更新清单地址（镜像，主地址失败时使用）",
                   style="Muted.TLabel").pack(anchor="w", pady=(10, 2))
-        e2 = ttk.Entry(wrap)
+        e2 = ttk.Entry(p2)
         e2.pack(fill="x")
         e2.insert(0, cfg.get("mirror_url") or "")
-        ttk.Label(wrap, wraplength=480, style="Muted.TLabel", text=(
+        ttk.Label(p2, wraplength=470, style="Muted.TLabel", text=(
             "国内网络打不开 GitHub 时，可把镜像换成加速地址，例如\n"
             "https://ghfast.top/https://raw.githubusercontent.com/…/version.json")).pack(
             anchor="w", pady=(10, 0))
@@ -2660,28 +2694,34 @@ class MoralScoreApp:
             e2.delete(0, tk.END)
             e2.insert(0, UPDATE_MANIFEST_JSDELIVR)
 
-        btns_cfg = ttk.Frame(wrap)
-        btns_cfg.pack(fill="x", pady=(10, 0))
-        ttk.Button(btns_cfg, text="保存", style="Primary.TButton",
+        row_s = ttk.Frame(p2)
+        row_s.pack(fill="x", pady=(14, 0))
+        ttk.Button(row_s, text="保存", style="Primary.TButton",
                    command=save_cfg).pack(side="right")
-        ttk.Button(btns_cfg, text="恢复默认", command=reset_cfg).pack(side="right", padx=(0, 8))
+        ttk.Button(row_s, text="恢复默认", command=reset_cfg).pack(
+            side="right", padx=(0, 8))
 
-        ttk.Separator(wrap).pack(fill="x", pady=(16, 12))
-
-        # ── AI 对接（MCP）──
-        ttk.Label(wrap, text="AI 对接（MCP）", style="CardTitle.TLabel").pack(anchor="w")
-        row_ai = ttk.Frame(wrap)
-        row_ai.pack(fill="x", pady=(10, 0))
+        # ── 面板：AI 对接 ──
+        p3 = ttk.Frame(content)
+        panels["ai"] = p3
+        ttk.Label(p3, text="AI 对接（MCP）", style="CardTitle.TLabel").pack(anchor="w")
+        row_ai = ttk.Frame(p3)
+        row_ai.pack(fill="x", pady=(14, 0))
         ttk.Button(row_ai, text="重新生成 MCP 配置",
                    command=self._regen_mcp_config).pack(side="left")
         ttk.Button(row_ai, text="接入说明",
                    command=self._open_ai_doc).pack(side="left", padx=(8, 0))
         ttk.Button(row_ai, text="打开文件夹",
                    command=self._open_ai_folder).pack(side="left", padx=(8, 0))
-        ttk.Label(wrap, wraplength=480, style="Muted.TLabel", text=(
-            "在 AI 客户端（Cherry Studio / Claude Desktop 等）里添加 AI对接\\MCP配置.json 的内容即可。\n"
-            "挪动安装目录或重装后，点「重新生成 MCP 配置」按实际路径重写。")).pack(
-            anchor="w", pady=(8, 0))
+        ttk.Label(p3, wraplength=470, justify="left", style="Muted.TLabel", text=(
+            "在 AI 客户端（Cherry Studio / Claude Desktop 等）里添加\n"
+            "AI对接\\MCP配置.json 的内容即可。挪动安装目录或重装后，\n"
+            "点「重新生成 MCP 配置」按实际路径重写。")).pack(anchor="w", pady=(14, 0))
+
+        add_nav("roster", "名单模板")
+        add_nav("update", "版本与更新")
+        add_nav("ai", "AI 对接")
+        show("roster")
 
     def get_folder_path(self):
         """月份数据文件夹，锚定在程序根目录而不是当前工作目录。"""

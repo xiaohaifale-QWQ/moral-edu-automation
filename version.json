@@ -1,14 +1,14 @@
 {
-  "version": "1.8.4.0",
-  "notes": "1. 设置里新增「添加模板」按钮：选 名单模板.xlsx（自动带出班级/寝室/室长）或四列名单文件，和拖入走同一套确认流程",
+  "version": "1.9.0.1",
+  "notes": "1. 设置改为左侧模块按钮（名单模板 / 版本与更新 / AI 对接），底不再被裁掉\n2. 「添加模板」选完文件直接替换当前模板（自动备份，不再弹确认框）\n3. 新增「打开模板编辑」：用 Excel 直接打开 名单模板.xlsx 填写，改完点「刷新模板」生效\n4. 删除开局弹窗：空白名单启动不再打扰",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.4.0/deyufen-1.8.4.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.4.0/deyufen-1.8.4.0-win64.zip",
-      "sha256": "fe1016f13ef4585c5d1cd8479b2ba0d074668448684ebd0af29ffab4f706275f",
-      "size": 110618413
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.1/deyufen-1.9.0.1-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.1/deyufen-1.9.0.1-win64.zip",
+      "sha256": "7600aaa1a0ca67a562921838a0f24cb61f81565b87f609de7b510ec5b848f5f7",
+      "size": 110617834
     }
   }
 }
