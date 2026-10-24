@@ -1,14 +1,14 @@
 {
-  "version": "1.7.0",
-  "notes": "1. 新增「班级名单」导入（空白模板开箱可用）\n2. 新增「检查更新」GitHub 热更新\n3. AI 连接页新增「重新生成 MCP 配置」\n4. 打包 mcp_server.exe，用户机无需装 Python",
+  "version": "1.8.0",
+  "notes": "1. 左下角新增「设置」：检查更新、更新源、MCP 配置全部收进设置\n2. AI 连接页只留状态，界面更干净\n3. 每次启动自动检查更新（无新版/网络不通不打扰）",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.7.0/deyufen-1.7.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.7.0/deyufen-1.7.0-win64.zip",
-      "sha256": "86a106f7e3d9234d80437363b704ef4ac9399d89bd474cefa1942d0496aff647",
-      "size": 109811963
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.0/deyufen-1.8.0-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.0/deyufen-1.8.0-win64.zip",
+      "sha256": "506dfd4ba89cd22f409c875d54361b46decabd315ef894e9e9f29bf32e592a84",
+      "size": 109814382
     }
   }
 }

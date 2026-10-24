@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -565,20 +565,16 @@ class MoralScoreApp:
             ("ai", "AI 连接", "sources"),
         ], self._on_nav, width=186)
 
-        # 侧边栏底部：版本号 + 检查更新。
+        # 侧边栏底部：版本号 + 设置入口。
         # 必须在 nav.pack 之前先 pack(side="bottom")，否则会被撑满的导航挤没。
         side_foot = ttk.Frame(side, style="Sidebar.TFrame", padding=(18, 6, 18, 14))
         side_foot.pack(side="bottom", fill="x")
         self.lbl_version = ttk.Label(side_foot, text=f"v{APP_VERSION}",
                                      style="SidebarMuted.TLabel")
         self.lbl_version.pack(anchor="w")
-        self.btn_check_update = ttk.Button(side_foot, text="检查更新",
-                                           command=lambda: self._check_update(manual=True))
-        self.btn_check_update.pack(anchor="w", pady=(6, 0))
-        lbl_upd_cfg = ttk.Label(side_foot, text="更新设置", style="SidebarMuted.TLabel",
-                                cursor="hand2")
-        lbl_upd_cfg.pack(anchor="w", pady=(4, 0))
-        lbl_upd_cfg.bind("<Button-1>", lambda e: self._show_update_config())
+        self.btn_settings = ttk.Button(side_foot, text="设置",
+                                       command=self.show_settings_dialog)
+        self.btn_settings.pack(anchor="w", pady=(6, 0))
 
         self.nav.pack(fill="both", expand=True)
 
@@ -990,15 +986,8 @@ class MoralScoreApp:
         bar.pack(fill="x", pady=(0, 12))
         self.ai_status = ttk.Label(bar, text="", style="Muted.TLabel")
         self.ai_status.pack(side="left")
-        # 从右往左 pack，视觉顺序：刷新 | 接入说明 | 打开文件夹 | 重新生成 MCP 配置
-        ttk.Button(bar, text="打开文件夹",
-                   command=self._open_ai_folder).pack(side="right")
-        ttk.Button(bar, text="接入说明",
-                   command=self._open_ai_doc).pack(side="right", padx=(8, 0))
-        ttk.Button(bar, text="重新生成 MCP 配置",
-                   command=self._regen_mcp_config).pack(side="right", padx=(8, 0))
-        ttk.Button(bar, text="刷新",
-                   command=self.refresh_ai_view).pack(side="right", padx=(8, 0))
+        # MCP 配置/接入说明/打开文件夹 收进了左下角「设置」对话框，这里只留状态
+        ttk.Label(bar, text="接入与配置入口在左下角「设置」", style="Muted.TLabel").pack(side="right")
 
         # ========== AI 写入的记录（逐条，可改、可驳回） ==========
         log_card = SectionCard(self.frame_ai, text="AI 写入的记录（当前周期，点一行可修改）")
@@ -2149,10 +2138,9 @@ class MoralScoreApp:
         threading.Thread(target=self._check_update_worker, args=(manual,), daemon=True).start()
 
     def _check_update_worker(self, manual):
+        # 每次启动都检查（无 24h 节流）；last_check 仅作记录。
+        # 自动模式全程静默：无新版 / 网络不通都不弹窗，只有手动检查才给反馈。
         cfg = self._update_config()
-        if not manual and time.time() - float(cfg.get("last_check") or 0) < 24 * 3600:
-            self.root.after(0, self._update_done)
-            return
         info = None
         seen = []
         for url in (cfg.get("manifest_url"), cfg.get("mirror_url"),
@@ -2402,48 +2390,83 @@ class MoralScoreApp:
         self._write_bridge_state(running=False)
         self.root.destroy()
 
-    def _show_update_config(self):
-        """更新源设置：给国内网络 / 私有部署留的口子。"""
+    def show_settings_dialog(self):
+        """左下角「设置」对话框：版本/检查更新、更新源、AI 对接三段。
+
+        自动检查更新在每次启动后台静默跑（无新版或网络不通都不打扰），
+        这里的「检查更新」是手动触发，无论结果都会给一句提示。
+        """
         cfg = self._update_config()
         top = tk.Toplevel(self.root)
-        top.title("更新设置")
+        top.title("设置")
         top.grab_set()
         top.resizable(False, False)
-        self._place_dialog(top, 540, 320)
+        self._place_dialog(top, 560, 560)
         wrap = ttk.Frame(top, padding=24)
         wrap.pack(fill="both", expand=True)
+
+        # ── 版本 / 检查更新 ──
         ttk.Label(wrap, text=f"当前版本 v{APP_VERSION}", style="Strong.TLabel").pack(anchor="w")
-        ttk.Label(wrap, text="更新清单地址（主）", style="Muted.TLabel").pack(anchor="w", pady=(14, 2))
+        row_u = ttk.Frame(wrap)
+        row_u.pack(fill="x", pady=(10, 0))
+        self.btn_check_update = ttk.Button(row_u, text="检查更新",
+                                           command=lambda: self._check_update(manual=True))
+        self.btn_check_update.pack(side="left")
+        ttk.Label(row_u, text="每次启动也会自动检查，无新版或网络不通时不弹窗",
+                  style="Muted.TLabel").pack(side="left", padx=(12, 0))
+
+        ttk.Separator(wrap).pack(fill="x", pady=(16, 12))
+
+        # ── 更新源 ──
+        ttk.Label(wrap, text="更新源", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(wrap, text="更新清单地址（主）", style="Muted.TLabel").pack(anchor="w", pady=(8, 2))
         e1 = ttk.Entry(wrap)
         e1.pack(fill="x")
         e1.insert(0, cfg.get("manifest_url") or "")
         ttk.Label(wrap, text="更新清单地址（镜像，主地址失败时使用）",
-                  style="Muted.TLabel").pack(anchor="w", pady=(12, 2))
+                  style="Muted.TLabel").pack(anchor="w", pady=(10, 2))
         e2 = ttk.Entry(wrap)
         e2.pack(fill="x")
         e2.insert(0, cfg.get("mirror_url") or "")
-        ttk.Label(wrap, wraplength=460, style="Muted.TLabel", text=(
+        ttk.Label(wrap, wraplength=480, style="Muted.TLabel", text=(
             "国内网络打不开 GitHub 时，可把镜像换成加速地址，例如\n"
             "https://ghfast.top/https://raw.githubusercontent.com/…/version.json")).pack(
             anchor="w", pady=(10, 0))
 
-        def save():
+        def save_cfg():
             cfg["manifest_url"] = e1.get().strip() or UPDATE_MANIFEST_DEFAULT
             cfg["mirror_url"] = e2.get().strip()
             self._save_update_config(cfg)
-            top.destroy()
-            messagebox.showinfo("更新设置", "已保存。")
+            messagebox.showinfo("设置", "更新源已保存。", parent=top)
 
-        def reset():
+        def reset_cfg():
             e1.delete(0, tk.END)
             e1.insert(0, UPDATE_MANIFEST_DEFAULT)
             e2.delete(0, tk.END)
             e2.insert(0, UPDATE_MANIFEST_JSDELIVR)
 
-        btns = ttk.Frame(wrap)
-        btns.pack(fill="x", pady=(16, 0))
-        ttk.Button(btns, text="保存", style="Primary.TButton", command=save).pack(side="right")
-        ttk.Button(btns, text="恢复默认", command=reset).pack(side="right", padx=(0, 8))
+        btns_cfg = ttk.Frame(wrap)
+        btns_cfg.pack(fill="x", pady=(10, 0))
+        ttk.Button(btns_cfg, text="保存", style="Primary.TButton",
+                   command=save_cfg).pack(side="right")
+        ttk.Button(btns_cfg, text="恢复默认", command=reset_cfg).pack(side="right", padx=(0, 8))
+
+        ttk.Separator(wrap).pack(fill="x", pady=(16, 12))
+
+        # ── AI 对接（MCP）──
+        ttk.Label(wrap, text="AI 对接（MCP）", style="CardTitle.TLabel").pack(anchor="w")
+        row_ai = ttk.Frame(wrap)
+        row_ai.pack(fill="x", pady=(10, 0))
+        ttk.Button(row_ai, text="重新生成 MCP 配置",
+                   command=self._regen_mcp_config).pack(side="left")
+        ttk.Button(row_ai, text="接入说明",
+                   command=self._open_ai_doc).pack(side="left", padx=(8, 0))
+        ttk.Button(row_ai, text="打开文件夹",
+                   command=self._open_ai_folder).pack(side="left", padx=(8, 0))
+        ttk.Label(wrap, wraplength=480, style="Muted.TLabel", text=(
+            "在 AI 客户端（Cherry Studio / Claude Desktop 等）里添加 AI对接\\MCP配置.json 的内容即可。\n"
+            "挪动安装目录或重装后，点「重新生成 MCP 配置」按实际路径重写。")).pack(
+            anchor="w", pady=(8, 0))
 
     def get_folder_path(self):
         """月份数据文件夹，锚定在程序根目录而不是当前工作目录。"""

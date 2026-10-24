@@ -11,9 +11,9 @@
 1. 到 [Releases](https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases) 下载
    `deyufen-setup-x.x.x.exe`，双击安装（默认装到用户目录，无需管理员）。
 2. 首次运行会引导「班级名单」导入：从 Excel 复制（学号、姓名、寝室号、角色）粘贴即可。
-3. 以后有新版本：软件侧边栏「检查更新」→ 自动下载、校验 sha256、替换、重启。
+3. 以后有新版本：每次启动软件会自动检查并弹窗询问（无新版/网络不通不打扰）；也可在左下角「设置 → 检查更新」手动触发，自动下载、校验 sha256、替换、重启。
    更新不动 `名单模板.xlsx`、`20XX年X月/`、`更新配置.json`。
-4. 国内网络打不开 GitHub 时：侧边栏「更新设置」把镜像换成
+4. 国内网络打不开 GitHub 时：「设置 → 更新源」把镜像换成
    `https://ghfast.top/https://raw.githubusercontent.com/...` 这类加速地址，或到 Releases 手动下载。
 
 ### 首次运行提示（SmartScreen）
@@ -25,7 +25,7 @@ exe 未购买代码签名证书，Windows 可能弹「已保护你的电脑」�
 
 安装包已内置 `AI对接\mcp_server.exe`，用户机不需要装 Python。
 把 `AI对接\MCP配置.json` 里的内容加到支持 MCP 的客户端（Cherry Studio / Claude Desktop 等）即可。
-挪动安装目录后，在软件「AI 连接」页点 **重新生成 MCP 配置** 修复路径。
+挪动安装目录后，在左下角「设置 → 重新生成 MCP 配置」修复路径。
 
 ## 开发者：构建与发布
 
