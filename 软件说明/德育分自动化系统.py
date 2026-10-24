@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.3.2"
+APP_VERSION = "1.8.4.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -713,6 +713,10 @@ class MoralScoreApp:
             parts_list, cls_hint = self._read_roster_source(target)
         except Exception as exc:
             return messagebox.showerror("读取失败", f"{target}\n\n{exc}")
+        self._import_parsed_roster(target, parts_list, cls_hint)
+
+    def _import_parsed_roster(self, target, parts_list, cls_hint=""):
+        """解析名单并弹确认框（拖入 / 设置按钮 / 对话框共用）。"""
         rows, errors = self._parse_roster_parts(parts_list)
         if not rows:
             return messagebox.showwarning(
@@ -720,6 +724,19 @@ class MoralScoreApp:
                 "没能从文件里解析出名单。\n"
                 + (errors[0] if errors else "请确认列序：学号、姓名、寝室号、角色"))
         self._show_drop_import_dialog(target, rows, errors, cls_hint)
+
+    def pick_roster_file(self):
+        """设置里的「添加模板」：选文件 → 走与拖入完全相同的导入流程。"""
+        path = filedialog.askopenfilename(
+            self.root, title="选择 名单模板.xlsx 或名单文件",
+            filetypes=[("名单文件", "*.xlsx *.csv"), ("所有文件", "*.*")])
+        if not path:
+            return
+        try:
+            parts_list, cls_hint = self._read_roster_source(path)
+        except Exception as exc:
+            return messagebox.showerror("读取失败", f"{path}\n\n{exc}")
+        self._import_parsed_roster(path, parts_list, cls_hint)
 
     def _show_drop_import_dialog(self, path, rows, errors, cls_hint=""):
         """拖入名单后的确认框：识别结果 + 班级名 + 「确定导入」一步完成。"""
@@ -2578,7 +2595,7 @@ class MoralScoreApp:
         self.root.destroy()
 
     def show_settings_dialog(self):
-        """左下角「设置」对话框：版本/检查更新、更新源、AI 对接三段。
+        """左下角「设置」对话框：名单模板 / 版本更新 / 更新源 / AI 对接。
 
         自动检查更新在每次启动后台静默跑（无新版或网络不通都不打扰），
         这里的「检查更新」是手动触发，无论结果都会给一句提示。
@@ -2588,9 +2605,20 @@ class MoralScoreApp:
         top.title("设置")
         top.grab_set()
         top.resizable(False, False)
-        self._place_dialog(top, 560, 560)
+        self._place_dialog(top, 560, 620)
         wrap = ttk.Frame(top, padding=24)
         wrap.pack(fill="both", expand=True)
+
+        # ── 名单模板 ──
+        ttk.Label(wrap, text="名单模板", style="CardTitle.TLabel").pack(anchor="w")
+        row_t = ttk.Frame(wrap)
+        row_t.pack(fill="x", pady=(10, 0))
+        ttk.Button(row_t, text="添加模板…", style="Primary.TButton",
+                   command=self.pick_roster_file).pack(side="left")
+        ttk.Label(row_t, text="选 名单模板.xlsx（自动带出班级/寝室）或四列名单文件；"
+                              "也可以直接拖进主窗口", style="Muted.TLabel").pack(
+            side="left", padx=(12, 0))
+        ttk.Separator(wrap).pack(fill="x", pady=(16, 12))
 
         # ── 版本 / 检查更新 ──
         ttk.Label(wrap, text=f"当前版本 v{APP_VERSION}", style="Strong.TLabel").pack(anchor="w")
