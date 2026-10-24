@@ -1,14 +1,14 @@
 {
-  "version": "1.8.3.1",
-  "notes": "1. 拖入名单后弹出确认框：显示识别人数 + 填班级名，点「确定导入」一步完成（回车也行）\n2. 版本号改为四位（如 1.8.3.1）：bug 修复改最后一位，并修复四位版本比较",
+  "version": "1.8.3.2",
+  "notes": "1. 修复：拖入《名单模板.xlsx》本身时只读了左半栏、丢了寝室和班级信息——现在自动识别模板结构，完整导入名单+班级+寝室+室长，寝室星级滑块随之就位",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.3.1/deyufen-1.8.3.1-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.3.1/deyufen-1.8.3.1-win64.zip",
-      "sha256": "5a4455ccfefe50009e377a416aec089cb2362661342bc1a1235dc1a2acbe4a3d",
-      "size": 110614031
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.3.2/deyufen-1.8.3.2-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.8.3.2/deyufen-1.8.3.2-win64.zip",
+      "sha256": "c7bb79c0cf668514a69303424644d7b89a7d6fdd3678455d5ef8dcdd41e9ef32",
+      "size": 110615422
     }
   }
 }

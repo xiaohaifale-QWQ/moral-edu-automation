@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.8.3.1"
+APP_VERSION = "1.8.3.2"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -710,7 +710,7 @@ class MoralScoreApp:
                 pass
             return
         try:
-            parts_list = self._read_roster_file(target)
+            parts_list, cls_hint = self._read_roster_source(target)
         except Exception as exc:
             return messagebox.showerror("读取失败", f"{target}\n\n{exc}")
         rows, errors = self._parse_roster_parts(parts_list)
@@ -719,9 +719,9 @@ class MoralScoreApp:
                 "名单为空",
                 "没能从文件里解析出名单。\n"
                 + (errors[0] if errors else "请确认列序：学号、姓名、寝室号、角色"))
-        self._show_drop_import_dialog(target, rows, errors)
+        self._show_drop_import_dialog(target, rows, errors, cls_hint)
 
-    def _show_drop_import_dialog(self, path, rows, errors):
+    def _show_drop_import_dialog(self, path, rows, errors, cls_hint=""):
         """拖入名单后的确认框：识别结果 + 班级名 + 「确定导入」一步完成。"""
         top = tk.Toplevel(self.root)
         top.title("拖入名单")
@@ -742,7 +742,8 @@ class MoralScoreApp:
         ttk.Label(wrap, text="班级全称", style="Muted.TLabel").pack(anchor="w", pady=(14, 2))
         en_cls = ttk.Entry(wrap)
         en_cls.pack(fill="x")
-        en_cls.insert(0, "" if self.class_name == "未设置班级" else self.class_name)
+        prefill = cls_hint or ("" if self.class_name == "未设置班级" else self.class_name)
+        en_cls.insert(0, prefill)
         en_cls.focus_set()
         en_cls.select_range(0, tk.END)
         ttk.Label(wrap, wraplength=440, style="Muted.TLabel", text=(
@@ -770,15 +771,52 @@ class MoralScoreApp:
         top.protocol("WM_DELETE_WINDOW", cancel)
 
     @staticmethod
-    def _read_roster_file(path):
-        """读名单文件为分列文本（xlsx 用第一张表，csv 按 , \\t ，；切）。"""
+    def _read_roster_source(path):
+        """读名单来源，返回 (分列行, 班级名提示)。
+
+        两种文件都认：
+        - 普通名单文件：首表按 学号/姓名/寝室号/角色 四列读（csv 同理）
+        - 《名单模板.xlsx》本身（含「月表模板」表）：完整导入——名单取
+          月表模板 A/B 列，班级名取 C2，寝室与室长取「寝室名单」表，
+          这样把模板拖进来，寝室页的星级滑块立刻就有数据
+        """
         if path.lower().endswith(".csv"):
             with open(path, "r", encoding="utf-8-sig") as f:
-                return [re.split(r"[\t,，;；]+", ln) for ln in f.read().splitlines()]
+                return [re.split(r"[\t,，;；]+", ln) for ln in f.read().splitlines()], ""
         wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
         try:
+            if "月表模板" in wb.sheetnames:
+                parts, cls_hint = [], ""
+                for r, row in enumerate(wb["月表模板"].iter_rows(values_only=True), 1):
+                    cells = ["" if v is None else str(v).strip() for v in row]
+                    if r == 2 and len(cells) > 2 and cells[2]:
+                        cls_hint = cells[2]
+                    sid = cells[0] if cells else ""
+                    name = cells[1] if len(cells) > 1 else ""
+                    if sid and "签名" not in sid and "考评" not in sid and name:
+                        parts.append([sid, name])
+                if "寝室名单" in wb.sheetnames:
+                    dorm_of, role_of = {}, {}
+                    for row in wb["寝室名单"].iter_rows(values_only=True):
+                        cells = ["" if v is None else str(v).strip() for v in row]
+                        room = cells[0] if cells else ""
+                        ppl = cells[2] if len(cells) > 2 else ""
+                        leader = cells[6] if len(cells) > 6 else ""
+                        if not room or "房" in room:
+                            continue
+                        for n in re.split(r"[，,\s]+", ppl):
+                            if n:
+                                dorm_of[n] = room
+                                role_of.setdefault(n, "成员")
+                        for n in re.split(r"[，,\s]+", leader):
+                            if n:
+                                dorm_of[n] = room
+                                role_of[n] = "室长"
+                    parts = [[sid, name, dorm_of.get(name, ""), role_of.get(name, "成员")]
+                             for sid, name in parts]
+                return parts, cls_hint
             ws = wb.worksheets[0]
-            return [list(row[:4]) for row in ws.iter_rows(values_only=True)]
+            return [list(row[:4]) for row in ws.iter_rows(values_only=True)], ""
         finally:
             wb.close()
 
@@ -1965,7 +2003,8 @@ class MoralScoreApp:
         ttk.Label(head, text="班级全称").pack(side="left")
         en_cls = ttk.Entry(head, width=26)
         en_cls.pack(side="left", padx=(8, 0))
-        en_cls.insert(0, "" if self.class_name == "未设置班级" else self.class_name)
+        prefill = cls_hint or ("" if self.class_name == "未设置班级" else self.class_name)
+        en_cls.insert(0, prefill)
         ttk.Label(head, text="（如：计算机2301，会写进周表表头与月表）",
                   style="Muted.TLabel").pack(side="left", padx=(8, 0))
 
@@ -2033,7 +2072,7 @@ class MoralScoreApp:
             if not path:
                 return
             try:
-                parts_list = self._read_roster_file(path)
+                parts_list, _hint = self._read_roster_source(path)
             except Exception as exc:
                 messagebox.showerror("读取失败", f"{path}\n\n{exc}", parent=top)
                 return
@@ -2082,7 +2121,7 @@ class MoralScoreApp:
                 if not path or not os.path.exists(path):
                     return
                 try:
-                    parts = self._read_roster_file(path)
+                    parts, _hint = self._read_roster_source(path)
                 except Exception as exc:
                     messagebox.showerror("读取失败", f"{path}\n\n{exc}", parent=top)
                     return

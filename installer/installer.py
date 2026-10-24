@@ -32,7 +32,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_NAME = "德育分自动化系统"
-APP_VERSION = "1.8.3.1"
+APP_VERSION = "1.8.3.2"
 MUTEX_NAME = "Global\\deyufen_install"
 REG_UNINSTALL = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\\" + APP_NAME
 DEFAULT_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(),
