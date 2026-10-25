@@ -128,7 +128,7 @@ check("没有弹确认框", not [w for w in root.winfo_children()
                           if isinstance(w, tk.Toplevel) and w.title() == "拖入名单"])
 check("直接导入 6 人", len(app.week_data) == 6, str(len(app.week_data)))
 check("班级来自模板", app.class_name == "美化一班", app.class_name)
-check("成功 toast", any("模板已替换" in t for t in toasts))
+check("成功 toast", any("模板已" in t for t in toasts), str(toasts))
 check("自动备份存在", any(n.startswith("名单模板.自动备份-") for n in os.listdir(workdir)))
 
 print("### 4. 导航切换 + 选中态 + 不裁屏")

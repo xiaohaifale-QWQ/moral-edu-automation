@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.0.3"
+APP_VERSION = "1.9.0.4"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -724,8 +724,64 @@ class MoralScoreApp:
             return messagebox.showerror("读取失败", f"{target}\n\n{exc}")
         self._import_parsed_roster(target, parts_list, cls_hint)
 
+    @staticmethod
+    def _is_full_template(path):
+        """是不是一份完整的《名单模板.xlsx》（周表/月表/寝室三表齐）。"""
+        try:
+            wb = openpyxl.load_workbook(path, read_only=True)
+            try:
+                names = set(wb.sheetnames)
+            finally:
+                wb.close()
+            return {"周表模板", "月表模板", "寝室名单"} <= names
+        except Exception:
+            return False
+
+    def _import_whole_template(self, path):
+        """整文件替换当前名单模板（1:1 克隆，保排版/配对/寝室顺序/签名栏）。
+
+        用于拖入/添加的是完整名单模板的场景——比解析重建更忠实：
+        周表左右配对顺序、寝室排列、周表模板2 签名栏全部原样保留。
+        """
+        tpl = self._template_path()
+        if os.path.abspath(path) == os.path.abspath(tpl):
+            try:
+                notify(self.root, "这就是当前正在使用的模板，无需导入。",
+                       title="添加模板", kind="info", duration=6000)
+            except Exception:
+                pass
+            return
+        bak = os.path.join(os.path.dirname(tpl), "名单模板.自动备份-"
+                           + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".xlsx")
+        try:
+            shutil.copy2(tpl, bak)
+        except Exception as exc:
+            if not messagebox.askyesno("备份失败",
+                                       f"替换前自动备份失败：{exc}\n仍要继续吗？（有风险）"):
+                return
+        while True:
+            try:
+                shutil.copy2(path, tpl)
+                break
+            except PermissionError:
+                if not self.ask_retry_save(tpl):
+                    return
+        # 整文件换过之后，类名等全部以新模板为准，直接重载
+        self.class_name = "未设置班级"
+        self.reload_template(ask=False)
+        try:
+            notify(self.root, f"模板已整体替换：{os.path.basename(path)}（原文件已备份）",
+                   title="添加模板", kind="success", duration=8000)
+        except Exception:
+            pass
+
     def _import_parsed_roster(self, target, parts_list, cls_hint=""):
-        """解析名单并弹确认框（拖入 / 设置按钮 / 对话框共用）。"""
+        """解析名单并弹确认框（拖入 / 设置按钮 / 对话框共用）。
+
+        来源本身是完整名单模板时改走整文件替换（更忠实，保留原表全部信息）。
+        """
+        if self._is_full_template(target):
+            return self._import_whole_template(target)
         rows, errors = self._parse_roster_parts(parts_list)
         if not rows:
             return messagebox.showwarning(
@@ -737,8 +793,10 @@ class MoralScoreApp:
     def pick_roster_file(self, parent=None):
         """设置里的「添加模板」：选完文件直接替换当前模板（自动备份，不弹确认）。
 
-        parent 必须用关键字传（挂到设置框上，文件选择框才弹在它上面、
-        不会被独占焦点的设置框压在背后）；默认打开程序目录，名单模板就在那里。
+        - 选的是完整名单模板 → 整文件 1:1 替换（保留排版/配对/寝室顺序/签名栏）
+        - 选的是四列名单文件 → 解析重建并沿用/要求班级名
+        parent 必须用关键字传（挂到设置框上，文件选择框才弹在它上面）；
+        默认打开程序目录，名单模板就在那里。
         """
         kwargs = dict(title="选择 名单模板.xlsx 或名单文件",
                       filetypes=[("名单文件", "*.xlsx *.csv"), ("所有文件", "*.*")],
@@ -748,6 +806,8 @@ class MoralScoreApp:
         path = filedialog.askopenfilename(**kwargs)
         if not path:
             return
+        if self._is_full_template(path):
+            return self._import_whole_template(path)
         try:
             parts_list, cls_hint = self._read_roster_source(path)
         except Exception as exc:
