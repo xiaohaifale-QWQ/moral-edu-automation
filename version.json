@@ -1,14 +1,14 @@
 {
-  "version": "1.9.1.0",
-  "notes": "1. 周表工具栏精简：「刷新模板」挪进设置，「班级名单」按钮移除（入口统一为 拖入 / 设置·添加模板）\n2. 设置·名单模板新增「刷新模板」「打开文件夹」（程序数据目录）\n3. 设置·版本与更新新增「联系作者：xiaohai@fale52.top」+ 一键复制邮箱",
+  "version": "1.9.1.1",
+  "notes": "1. 修复设置窗口按钮在部分电脑（高缩放/小屏）显示不全：按钮改为换行布局、提示文字独立成行、窗口尺寸按屏幕自适应",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.0/deyufen-1.9.1.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.0/deyufen-1.9.1.0-win64.zip",
-      "sha256": "8e30f1173a84c2ae2434ce72c06fb2fbb1cd1978ca34e6f968a8c19ac5733ab1",
-      "size": 110621920
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.1/deyufen-1.9.1.1-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.1/deyufen-1.9.1.1-win64.zip",
+      "sha256": "67fa2cf37d46b5a8f2a852671fa2bf3703fcdc4b6e0a0c9aa97493764327b59d",
+      "size": 110623467
     }
   }
 }

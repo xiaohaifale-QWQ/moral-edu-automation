@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.1.0"
+APP_VERSION = "1.9.1.1"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -2707,7 +2707,10 @@ class MoralScoreApp:
         top.title("设置")
         top.grab_set()
         top.resizable(False, False)
-        self._place_dialog(top, 700, 480)
+        # 尺寸按屏幕夹紧：小屏/高分屏（150% 缩放的笔记本）也不裁内容
+        dw = min(700, self.root.winfo_screenwidth() - 60)
+        dh = min(490, self.root.winfo_screenheight() - 120)
+        self._place_dialog(top, dw, dh)
         body = ttk.Frame(top, padding=20)
         body.pack(fill="both", expand=True)
 
@@ -2778,15 +2781,18 @@ class MoralScoreApp:
         p1 = tk.Frame(card, bg=PAGE_BG)
         panels["roster"] = p1
         ttk.Label(p1, text="名单模板", style="CardTitle.TLabel").pack(anchor="w")
+        # 高 DPI/小屏下四个按钮一行会溢出：固定两行两列，任何缩放都放得下
         row1 = ttk.Frame(p1)
         row1.pack(fill="x", pady=(14, 0))
         ttk.Button(row1, text="添加模板…", style="Primary.TButton",
                    command=lambda: self.pick_roster_file(parent=top)).pack(side="left")
         ttk.Button(row1, text="打开模板编辑",
                    command=self.open_template_file).pack(side="left", padx=(8, 0))
-        ttk.Button(row1, text="刷新模板",
-                   command=self.reload_template).pack(side="left", padx=(8, 0))
-        ttk.Button(row1, text="打开文件夹",
+        row2 = ttk.Frame(p1)
+        row2.pack(fill="x", pady=(8, 0))
+        ttk.Button(row2, text="刷新模板",
+                   command=self.reload_template).pack(side="left")
+        ttk.Button(row2, text="打开文件夹",
                    command=lambda: self._open_folder(self._base_dir())).pack(
             side="left", padx=(8, 0))
         ttk.Label(p1, wraplength=470, justify="left", style="Muted.TLabel", text=(
@@ -2806,8 +2812,10 @@ class MoralScoreApp:
         self.btn_check_update = ttk.Button(row_u, text="检查更新",
                                            command=lambda: self._check_update(manual=True))
         self.btn_check_update.pack(side="left")
-        ttk.Label(row_u, text="每次启动也会自动检查，无新版或网络不通时不弹窗",
-                  style="Muted.TLabel").pack(side="left", padx=(12, 0))
+        # 提示放按钮正下方整行（并排在高 DPI 下会把按钮挤出屏幕）
+        ttk.Label(p2, wraplength=470, style="Muted.TLabel", text=(
+            "每次启动也会自动检查，无新版或网络不通时不弹窗")).pack(
+            anchor="w", pady=(6, 0))
         ttk.Label(p2, text="更新清单地址（主）", style="Muted.TLabel").pack(
             anchor="w", pady=(18, 2))
         e1 = ttk.Entry(p2)
@@ -2862,13 +2870,16 @@ class MoralScoreApp:
         p3 = tk.Frame(card, bg=PAGE_BG)
         panels["ai"] = p3
         ttk.Label(p3, text="AI 对接（MCP）", style="CardTitle.TLabel").pack(anchor="w")
+        # 宽按钮单独一行，窄的两个一行（防高 DPI 溢出）
         row_ai = ttk.Frame(p3)
         row_ai.pack(fill="x", pady=(14, 0))
         ttk.Button(row_ai, text="重新生成 MCP 配置",
                    command=self._regen_mcp_config).pack(side="left")
-        ttk.Button(row_ai, text="接入说明",
-                   command=self._open_ai_doc).pack(side="left", padx=(8, 0))
-        ttk.Button(row_ai, text="打开文件夹",
+        row_ai2 = ttk.Frame(p3)
+        row_ai2.pack(fill="x", pady=(8, 0))
+        ttk.Button(row_ai2, text="接入说明",
+                   command=self._open_ai_doc).pack(side="left")
+        ttk.Button(row_ai2, text="打开文件夹",
                    command=self._open_ai_folder).pack(side="left", padx=(8, 0))
         ttk.Label(p3, wraplength=470, justify="left", style="Muted.TLabel", text=(
             "在 AI 客户端（Cherry Studio / Claude Desktop 等）里添加\\n"
