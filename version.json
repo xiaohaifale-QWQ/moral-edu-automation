@@ -1,14 +1,14 @@
 {
-  "version": "1.9.2.0",
-  "notes": "1. 寝室页：本周期没收到检查结果的寝室，滑块后挂红色「未发」标，一眼看出哪些还没出结果；AI 写入结果后红标自动消失\n2. AI 设定文档新增「卫生检查结果怎么认」：学校 App 的宿舍路径（滨海校区-西区-柳园-柳园420）自动映射到寝室号 柳420",
+  "version": "1.9.2.1",
+  "notes": "1. 设置窗口不再被拉长：高度跟随当前模块（AI 对接页紧凑，版本页自动变高），切模块窗口随之伸缩\n2. 修复 AI 面板说明文字里的字面换行符显示",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.0/deyufen-1.9.2.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.0/deyufen-1.9.2.0-win64.zip",
-      "sha256": "4cea81f75ecb167a68557dc3e56ac78f6e6eb1467d3f989eb2821b726b853ff6",
-      "size": 110626040
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.1/deyufen-1.9.2.1-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.1/deyufen-1.9.2.1-win64.zip",
+      "sha256": "fa62d46c28546884613d581f02f8ac6b3c7df7e1ceff74c9a145caef5c2c563c",
+      "size": 110625432
     }
   }
 }

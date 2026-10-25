@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.2.0"
+APP_VERSION = "1.9.2.1"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -2760,6 +2760,12 @@ class MoralScoreApp:
                 p.pack_forget()
                 paint(k, "sel" if k == key else "base")
             panels[key].pack(fill="both", expand=True, padx=16, pady=14)
+            # 窗口高度跟随当前面板（不拉长、不裁切），并夹在屏幕内居中
+            top.update_idletasks()
+            sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+            w = min(top.winfo_reqwidth() + 12, sw - 40)
+            h = min(top.winfo_reqheight() + 12, sh - 80)
+            self._place_dialog(top, w, h)
 
         def add_nav(key, label):
             row = tk.Frame(nav, bg=PAGE_BG, cursor="hand2")
@@ -2901,17 +2907,6 @@ class MoralScoreApp:
         add_nav("update", "版本与更新")
         add_nav("ai", "AI 对接")
 
-        # 窗口尺寸按内容自适应：三个面板全部临时铺开量出最高需求，
-        # 以最高的为准（切模块永不裁内容），再夹在屏幕范围内居中。
-        for p in panels.values():
-            p.pack(fill="both", expand=True)
-        top.update_idletasks()
-        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        w = min(top.winfo_reqwidth() + 12, sw - 40)
-        h = min(top.winfo_reqheight() + 12, sh - 80)
-        for p in panels.values():
-            p.pack_forget()
-        self._place_dialog(top, w, h)
         show("roster")
 
     def get_folder_path(self):
