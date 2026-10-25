@@ -1,14 +1,14 @@
 {
-  "version": "1.9.4.0",
-  "notes": "1. 寝室检查按次数计分：同一寝室一周期检查几次算几次（两次五星=成员各+2，明细写「五星寝室×2」），点「应用打分」入表后自动清零\n2. 寝室状态改为纯颜色：青=已报 红=未发 黑=已应用，删掉滑块后面的文字标\n3. 寝室统计页新增周次下拉，直接切周核对\n4. AI 规则：同一张照片里同寝室出现两次只看第一条",
+  "version": "1.9.4.1",
+  "notes": "1. 修复：上一版（1.9.4.0）安装后版本号仍显示 1.9.3.0 的标注错误——功能不受影响，本版修正版本号",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.0/deyufen-1.9.4.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.0/deyufen-1.9.4.0-win64.zip",
-      "sha256": "c1af8c3505c705015aad918686e41186d08ac8f312e3dcf19b97044d3470a9d5",
-      "size": 110631647
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.1/deyufen-1.9.4.1-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.1/deyufen-1.9.4.1-win64.zip",
+      "sha256": "651861e8887c2c8243291233442c873631795fc06d2dc9b67f23a019b6deb701",
+      "size": 110631197
     }
   }
 }
