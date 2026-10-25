@@ -1,14 +1,14 @@
 {
-  "version": "1.9.0.4",
-  "notes": "1. 导入完整名单模板改为整文件 1:1 替换：周表左右配对顺序、寝室表原顺序、签字栏名字等原表信息全部保留（此前是解析重建，会改变这些）",
+  "version": "1.9.1.0",
+  "notes": "1. 周表工具栏精简：「刷新模板」挪进设置，「班级名单」按钮移除（入口统一为 拖入 / 设置·添加模板）\n2. 设置·名单模板新增「刷新模板」「打开文件夹」（程序数据目录）\n3. 设置·版本与更新新增「联系作者：xiaohai@fale52.top」+ 一键复制邮箱",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.4/deyufen-1.9.0.4-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.0.4/deyufen-1.9.0.4-win64.zip",
-      "sha256": "b0b9b2681476e4b9a597598956a66d2ae4e40128734a9f6f8fd7796c69c825e7",
-      "size": 110622173
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.0/deyufen-1.9.1.0-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.0/deyufen-1.9.1.0-win64.zip",
+      "sha256": "8e30f1173a84c2ae2434ce72c06fb2fbb1cd1978ca34e6f968a8c19ac5733ab1",
+      "size": 110621920
     }
   }
 }

@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.0.4"
+APP_VERSION = "1.9.1.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -673,7 +673,7 @@ class MoralScoreApp:
         except Exception:
             self.dnd_active = False
             try:
-                self.week_status.config(text="拖拽导入不可用（缺少组件），请用「班级名单」按钮导入",
+                self.week_status.config(text="拖拽导入不可用（缺少组件），请用 设置 → 添加模板 导入",
                                         foreground=WARN_C)
             except Exception:
                 pass
@@ -824,7 +824,7 @@ class MoralScoreApp:
             return messagebox.showwarning(
                 "缺少班级名",
                 "文件里没有班级信息，当前也还没设置过班级。\n"
-                "请选带班级名的 名单模板.xlsx，或先用周表页的「班级名单」设置一次。")
+                "请选带班级名的 名单模板.xlsx。")
         self._apply_roster_to_template(rows, cls)
         try:
             notify(self.root, f"模板已替换：{len(rows)} 人"
@@ -1033,10 +1033,7 @@ class MoralScoreApp:
         self.btn_undo.pack(side="left", padx=(0, 6))
         self.btn_redo = ttk.Button(bar, text="重做", state="disabled", command=self.redo_last_action)
         self.btn_redo.pack(side="left", padx=(0, 6))
-        self.btn_reload = ttk.Button(bar, text="刷新模板", command=self.reload_template)
-        self.btn_reload.pack(side="left")
-        self.btn_roster = ttk.Button(bar, text="班级名单", command=self.show_roster_dialog)
-        self.btn_roster.pack(side="left", padx=(6, 0))
+        # 「刷新模板」收进设置；「班级名单」入口由 拖入 / 设置·添加模板 取代
 
         self.week_status = ttk.Label(bar, text="等待操作", style="Muted.TLabel")
         self.week_status.pack(side="right")
@@ -1280,7 +1277,7 @@ class MoralScoreApp:
 
         if not self.dorm_stars:
             ttk.Label(sf, wraplength=560, style="Muted.TLabel", text=(
-                "名单里还没有寝室信息——在「班级名单」里导入含寝室号的名单后，\n"
+                "名单里还没有寝室信息——用 设置 → 添加模板 导入含寝室号的名单模板后，\n"
                 "这里会显示每个寝室的星级卡片；AI 写入的寝室记录也会直接挂在自己寝室下面。"
             )).grid(row=0, column=0, columnspan=columns, sticky="w", padx=12, pady=28)
 
@@ -1993,7 +1990,7 @@ class MoralScoreApp:
             if cls_raw and cls_raw.lower() != 'nan':
                 self.class_name = cls_raw if '班' in cls_raw else cls_raw + '班'
             if self.class_name == "未设置班级":
-                self.lbl_class.config(text="未设置班级 · 点「班级名单」导入",
+                self.lbl_class.config(text="未设置班级 · 在设置里添加模板",
                                       style="SidebarWarning.TLabel")
             else:
                 self.lbl_class.config(text=self.class_name, style="SidebarSuccess.TLabel")
@@ -2059,7 +2056,7 @@ class MoralScoreApp:
             self.load_week_data()
 
             if not self.week_data:
-                self.week_status.config(text="名单为空：点工具栏「班级名单」导入名单",
+                self.week_status.config(text="名单为空：左下角 设置 → 添加模板，或把名单文件拖进窗口",
                                         foreground=WARN_C)
         except Exception as e:
             messagebox.showerror("模板错误", f"读取失败：{e}")
@@ -2787,11 +2784,16 @@ class MoralScoreApp:
                    command=lambda: self.pick_roster_file(parent=top)).pack(side="left")
         ttk.Button(row1, text="打开模板编辑",
                    command=self.open_template_file).pack(side="left", padx=(8, 0))
+        ttk.Button(row1, text="刷新模板",
+                   command=self.reload_template).pack(side="left", padx=(8, 0))
+        ttk.Button(row1, text="打开文件夹",
+                   command=lambda: self._open_folder(self._base_dir())).pack(
+            side="left", padx=(8, 0))
         ttk.Label(p1, wraplength=470, justify="left", style="Muted.TLabel", text=(
             "「添加模板」选 名单模板.xlsx（自动带出班级/寝室/室长）或四列名单文件，\\n"
             "选好即替换当前模板（原文件自动备份）；也可以把文件直接拖进主窗口。\\n\\n"
             "「打开模板编辑」用 Excel 打开 名单模板.xlsx，改完保存并关闭 Excel，\\n"
-            "再点周表页的「刷新模板」生效。")).pack(anchor="w", pady=(14, 0))
+            "再点上面的「刷新模板」生效。")).pack(anchor="w", pady=(14, 0))
 
         # ── 面板：版本与更新 ──
         p2 = tk.Frame(card, bg=PAGE_BG)
@@ -2833,8 +2835,24 @@ class MoralScoreApp:
             e2.delete(0, tk.END)
             e2.insert(0, UPDATE_MANIFEST_JSDELIVR)
 
+        row_c = ttk.Frame(p2)
+        row_c.pack(fill="x", pady=(14, 0))
+        ttk.Label(row_c, text="联系作者：xiaohai@fale52.top",
+                  style="Muted.TLabel").pack(side="left")
+
+        def copy_mail():
+            self.root.clipboard_clear()
+            self.root.clipboard_append("xiaohai@fale52.top")
+            try:
+                notify(self.root, "邮箱已复制：xiaohai@fale52.top",
+                       title="联系作者", kind="success", duration=5000)
+            except Exception:
+                pass
+
+        ttk.Button(row_c, text="复制邮箱", command=copy_mail).pack(side="left", padx=(8, 0))
+
         row_s = ttk.Frame(p2)
-        row_s.pack(fill="x", pady=(14, 0))
+        row_s.pack(fill="x", pady=(10, 0))
         ttk.Button(row_s, text="保存", style="Primary.TButton",
                    command=save_cfg).pack(side="right")
         ttk.Button(row_s, text="恢复默认", command=reset_cfg).pack(

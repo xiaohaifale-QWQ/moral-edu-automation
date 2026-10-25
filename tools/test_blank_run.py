@@ -73,7 +73,7 @@ def main():
         check("侧边栏班级提示未设置", "未设置" in app.lbl_class.cget("text"),
               app.lbl_class.cget("text"))
         check("周表预览为空", len(app.tree_week.get_children()) == 0)
-        check("状态栏提示导入名单", "班级名单" in app.week_status.cget("text"),
+        check("状态栏提示导入名单", "添加模板" in app.week_status.cget("text"),
               app.week_status.cget("text"))
         check("侧边栏版本号", app.lbl_version.cget("text") == f"v{mod.APP_VERSION}")
         check("月度预览为空", len(app.tree_month.get_children()) == 0)
