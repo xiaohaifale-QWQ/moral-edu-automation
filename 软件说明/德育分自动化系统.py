@@ -388,8 +388,9 @@ class MoralScoreApp:
     def _apply_ai_dorm_stars(self, batch):
         """AI 卫生检查结果 → 直接设置寝室星级滑块（不写记录）。
 
-        用户在寝室统计页核对（AI 设的寝室号是青色、带「AI已设」标），
-        点「应用打分」后才真正生成星级评定表并加减分。
+        按次数计分：同一寝室每收到一次结果累计一次，应用打分时
+        分数 = 每次的星级分值之和；应用后清零。
+        AI 设过的寝室号显示青色；一个结果都没有的显示红色（未发）。
         """
         stars = batch.get("stars")
         if not isinstance(stars, dict) or not stars:
@@ -556,6 +557,7 @@ class MoralScoreApp:
         self.dorm_stars = {}
         self.dorm_controls = {}
         self.dorm_ai_set = set()
+        self.dorm_applied = set()
 
         # 撤回 / 重做（限制深度，避免长期使用内存单调增长）
         self.undo_stack = []
@@ -1238,9 +1240,14 @@ class MoralScoreApp:
         bar = ttk.Frame(self.frame_dorm)
         bar.pack(fill="x", pady=(0, 12))
 
-        self.lbl_dorm_week = ttk.Label(bar, text=f"当前周次：第{self.current_week.get()}周",
-                                       style="Strong.TLabel")
+        self.lbl_dorm_week = ttk.Label(bar, text="周次", style="Strong.TLabel")
         self.lbl_dorm_week.pack(side="left")
+        dorm_week_cb = ttk.Combobox(bar, textvariable=self.current_week,
+                                    values=["1", "2", "3", "4", "5"], width=4,
+                                    state="readonly")
+        dorm_week_cb.pack(side="left", padx=(6, 4))
+        dorm_week_cb.bind("<<ComboboxSelected>>", lambda e: self.on_dorm_week_change())
+        ttk.Label(bar, text="周", style="Muted.TLabel").pack(side="left")
         self.lbl_dorm_rule = ttk.Label(bar, text="", style="Muted.TLabel")
         self.lbl_dorm_rule.pack(side="left", padx=(14, 0))
 
@@ -1254,7 +1261,7 @@ class MoralScoreApp:
         self.dorm_ai_boxes = {}      # 寝室号 → AI 记录容器
 
         # ========== 主体：寝室星级评定 ==========
-        left_card = SectionCard(self.frame_dorm, text="寝室星级评定（青色 = AI 写入的记录，点击可改）")
+        left_card = SectionCard(self.frame_dorm, text="寝室星级评定（青=已报 红=未发；按次数计分，应用打分后清零）")
         self.dorm_left_card = left_card
         left_card.pack(fill="both", expand=True)
 
@@ -1300,9 +1307,9 @@ class MoralScoreApp:
             sf.columnconfigure(col, weight=1, uniform="dorm")
 
         self.dorm_ai_boxes.clear()
-        self.dorm_unrated = {}
         self.dorm_labels = {}
-        self._rebuild_dorm_ai_rows()
+        self.dorm_inspections = {}      # 寝室号 → [星级,...] 本周期收到的检查结果（按次数计分）
+        self._paint_dorm_states()
         for idx, dorm in enumerate(sorted(set(self.dorm_map.values()))):
             row, col = divmod(idx, columns)
             cell = ttk.Frame(sf)
@@ -1318,12 +1325,6 @@ class MoralScoreApp:
                                    command=lambda star, d=dorm: self._set_dorm_star(d, star))
             seg.pack(side="left")
             self.dorm_controls[dorm] = seg
-            # 本周期还没收到检查结果的寝室：滑块后面挂红标（_rebuild_dorm_ai_rows 刷新）
-            from tkwebui.core import PALETTE as _PAL
-            mark = tk.Label(top_row, text="", fg="#DC2626", bg=_PAL["bg"],
-                            font=("Microsoft YaHei UI", 9))
-            mark.pack(side="left", padx=(6, 0))
-            self.dorm_unrated[dorm] = mark
             ai_box = ttk.Frame(cell)
             ai_box.pack(fill="x")
             self.dorm_ai_boxes[dorm] = ai_box
@@ -1679,6 +1680,39 @@ class MoralScoreApp:
                              (self.ai_legend, self.ai_legend_auto), self.ai_empty,
                              self._collect_ai_rows())
 
+    def _paint_dorm_state(self, dorm):
+        """寝室号颜色 = 状态：青=本周期已报过结果；红=未发；黑=手动/已应用清零。"""
+        lbl = getattr(self, "dorm_labels", {}).get(dorm)
+        if lbl is None or not lbl.winfo_exists():
+            return
+        has_report = bool(getattr(self, "dorm_inspections", {}).get(dorm))
+        ai_set = dorm in getattr(self, "dorm_ai_set", set())
+        applied = dorm in getattr(self, "dorm_applied", set())
+        if has_report or ai_set:
+            lbl.config(foreground=ACCENT)          # 青 = 已报，待应用
+        elif applied:
+            lbl.config(foreground=INK)             # 黑 = 已应用清零
+        else:
+            lbl.config(foreground="#DC2626")       # 红 = 未发
+
+    def _paint_dorm_states(self):
+        for dorm in getattr(self, "dorm_labels", {}):
+            self._paint_dorm_state(dorm)
+
+    def on_dorm_week_change(self):
+        """寝室页切周次：未保存先问，然后加载该周数据并恢复星级/状态。"""
+        if not self._confirm_discard("切换周次"):
+            self._restore_cycle()
+            return
+        self.load_week_data()
+        self._sync_dorm_stars()
+        self.dorm_inspections = {}
+        self.dorm_ai_set = set()
+        self.dorm_applied = set()
+        self.lbl_dorm_week.config(text="周次")
+        self._rebuild_dorm_ai_rows()
+        self._sync_dorm_rule_label()
+
     def _rebuild_dorm_ai_rows(self):
         """把 AI 写入的寝室记录就地合并进各寝室卡片（不再单独成区）。
 
@@ -1698,19 +1732,7 @@ class MoralScoreApp:
             for w in box.winfo_children():
                 w.destroy()
             recs = per_dorm.get(dorm, [])
-            ai_set = dorm in getattr(self, "dorm_ai_set", set())
-            # 标记：有记录→无标；AI 已设滑块→青色「AI已设」；两者皆无→红色「未发」
-            mark = getattr(self, "dorm_unrated", {}).get(dorm)
-            if mark is not None and mark.winfo_exists():
-                if recs:
-                    mark.config(text="")
-                elif ai_set:
-                    mark.config(text="AI已设", foreground=ACCENT)
-                else:
-                    mark.config(text="未发", foreground="#DC2626")
-            lbl = getattr(self, "dorm_labels", {}).get(dorm)
-            if lbl is not None and lbl.winfo_exists():
-                lbl.config(foreground=(ACCENT if (ai_set and not recs) else INK))
+            self._paint_dorm_state(dorm)
             for r in recs:
                 color = WARN_C if r["fuzzy"] else ACCENT
                 txt = f"AI·{r['name']}({r['tail']})  {r['reason']}  {signed_text(r['score'])}"
@@ -1865,8 +1887,12 @@ class MoralScoreApp:
         self.dorm_stars[dorm] = star
         if origin == "ai":
             self.dorm_ai_set.add(dorm)
+            self.dorm_applied.discard(dorm)
+            # 按次数计分：每收到一次结果累计一次（应用打分后清零）
+            self.dorm_inspections.setdefault(dorm, []).append(star)
         else:
             self.dorm_ai_set.discard(dorm)
+            self.dorm_inspections.pop(dorm, None)   # 手动改滑块 = 覆盖 AI 计数
         seg = getattr(self, "dorm_controls", {}).get(dorm)
         if seg is not None and int(seg.variable.get()) != star:
             seg.variable.set(star)   # 触发 SegmentedControl 自行同步高亮
@@ -3233,26 +3259,44 @@ class MoralScoreApp:
         for info in self.week_data.values():
             info['records'] = [r for r in info['records'] if '星寝室' not in str(r[1])]
 
+        inspections = getattr(self, "dorm_inspections", {})
         applied = 0
         for sid, info in self.week_data.items():
             dorm = info.get('dorm', '未知')
             role = info.get('role', '成员')
-            if dorm in self.dorm_stars:
-                star = self.dorm_stars[dorm]
-                if star in rules[period]:
-                    score = rules[period][star].get(role, 0.0)
-                    if abs(score) < 1e-9:
-                        continue
-                    reason = f'{prefix}{star_zh_map[star]}星寝室'
-                    if role == '室长' and rules[period][star]['室长'] != rules[period][star]['成员']:
-                        reason += "(寝室长)"
-                    info['records'].append((score, reason))
-                    applied += 1
+            if dorm not in self.dorm_stars:
+                continue
+            stars_list = inspections.get(dorm) or [self.dorm_stars[dorm]]
+            # 按次数计分：本周期每收到一次检查结果，各按当次星级取分求和
+            score = 0.0
+            counts = {}
+            for star in stars_list:
+                if star not in rules[period]:
+                    continue
+                score += rules[period][star].get(role, 0.0)
+                counts[star] = counts.get(star, 0) + 1
+            if not counts:
+                continue
+            if abs(score) < 1e-9 and len(stars_list) < 2:
+                continue          # 单次四星这类 0 分不写；多次净 0 仍写，便于追溯
+            reason = prefix + "+".join(
+                f"{star_zh_map[star]}星寝室×{n}" if n > 1 else f"{star_zh_map[star]}星寝室"
+                for star, n in sorted(counts.items(), reverse=True))
+            if role == "室长":
+                reason += "(寝室长)"
+            info["records"].append((round(score, 2), reason))
+            applied += 1
 
         if not self.showing_inquiry:
             self.refresh_week_tree()
         self.generate_dorm_excel(period)
         self.save_week_data()
+
+        # 按次数计的分数已写入周表：清零计数与青标，寝室号转黑（已应用）防重复计分
+        self.dorm_applied = set(inspections.keys())
+        self.dorm_inspections = {}
+        self.dorm_ai_set = set()
+        self._paint_dorm_states()
 
         self.week_status.config(
             text=f"寝室星级已打分并保存（{period}规则，{applied} 条记录）", foreground=OK_C)

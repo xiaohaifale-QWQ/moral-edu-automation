@@ -1,14 +1,14 @@
 {
-  "version": "1.9.3.0",
-  "notes": "1. 【新工作流】发一堆寝室检查照片/结果给 AI → 它直接把星级设到寝室页滑块上（AI 设的寝室号青色+「AI已设」标），你核对后点「应用打分」才加减分\n2. 新增 MCP 工具 set_dorm_stars；部分寝室号识别不了也会把认出的先设上并报告\n3. 没收到结果的寝室仍挂红色「未发」标，写入后自动消失",
+  "version": "1.9.4.0",
+  "notes": "1. 寝室检查按次数计分：同一寝室一周期检查几次算几次（两次五星=成员各+2，明细写「五星寝室×2」），点「应用打分」入表后自动清零\n2. 寝室状态改为纯颜色：青=已报 红=未发 黑=已应用，删掉滑块后面的文字标\n3. 寝室统计页新增周次下拉，直接切周核对\n4. AI 规则：同一张照片里同寝室出现两次只看第一条",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.3.0/deyufen-1.9.3.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.3.0/deyufen-1.9.3.0-win64.zip",
-      "sha256": "86c0ef95464ea377afc2adac30cb3f48536e77d798f5f6ab5d80cc9db064c33e",
-      "size": 110630783
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.0/deyufen-1.9.4.0-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.0/deyufen-1.9.4.0-win64.zip",
+      "sha256": "c1af8c3505c705015aad918686e41186d08ac8f312e3dcf19b97044d3470a9d5",
+      "size": 110631647
     }
   }
 }
