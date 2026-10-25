@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.1.2"
+APP_VERSION = "1.9.2.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -1260,17 +1260,26 @@ class MoralScoreApp:
             sf.columnconfigure(col, weight=1, uniform="dorm")
 
         self.dorm_ai_boxes.clear()
+        self.dorm_unrated = {}
         for idx, dorm in enumerate(sorted(set(self.dorm_map.values()))):
             row, col = divmod(idx, columns)
             cell = ttk.Frame(sf)
             cell.grid(row=row, column=col, sticky="w", padx=(0, 18), pady=6)
-            ttk.Label(cell, text=dorm, width=6, anchor="w").pack(side="left")
+            top_row = ttk.Frame(cell)
+            top_row.pack(fill="x")
+            ttk.Label(top_row, text=dorm, width=6, anchor="w").pack(side="left")
             var = tk.IntVar(value=4)
             self.dorm_stars[dorm] = 4
-            seg = SegmentedControl(cell, [(3, "3星"), (4, "4星"), (5, "5星")], var,
+            seg = SegmentedControl(top_row, [(3, "3星"), (4, "4星"), (5, "5星")], var,
                                    command=lambda star, d=dorm: self._set_dorm_star(d, star))
             seg.pack(side="left")
             self.dorm_controls[dorm] = seg
+            # 本周期还没收到检查结果的寝室：滑块后面挂红标（_rebuild_dorm_ai_rows 刷新）
+            from tkwebui.core import PALETTE as _PAL
+            mark = tk.Label(top_row, text="", fg="#DC2626", bg=_PAL["bg"],
+                            font=("Microsoft YaHei UI", 9))
+            mark.pack(side="left", padx=(6, 0))
+            self.dorm_unrated[dorm] = mark
             ai_box = ttk.Frame(cell)
             ai_box.pack(fill="x")
             self.dorm_ai_boxes[dorm] = ai_box
@@ -1631,7 +1640,8 @@ class MoralScoreApp:
 
         每条记录挂在自己寝室的星级卡片下方：
           青色 = AI 写入；橙色 = AI 按姓名相似度匹配（请核对）。
-        点一条可直接进入该记录的修改框。没有记录的寝室保持干净。
+        点一条可直接进入该记录的修改框。
+        本周期没收到检查结果的寝室，滑块后面挂红色「未发」标提醒。
         """
         if not hasattr(self, "dorm_ai_boxes"):
             return
@@ -1643,7 +1653,12 @@ class MoralScoreApp:
         for dorm, box in self.dorm_ai_boxes.items():
             for w in box.winfo_children():
                 w.destroy()
-            for r in per_dorm.get(dorm, []):
+            recs = per_dorm.get(dorm, [])
+            # 红标：该寝室本周期没有任何检查结果
+            mark = getattr(self, "dorm_unrated", {}).get(dorm)
+            if mark is not None and mark.winfo_exists():
+                mark.config(text="" if recs else "未发")
+            for r in recs:
                 color = WARN_C if r["fuzzy"] else ACCENT
                 txt = f"AI·{r['name']}({r['tail']})  {r['reason']}  {signed_text(r['score'])}"
                 item = ttk.Label(box, text=txt, foreground=color,

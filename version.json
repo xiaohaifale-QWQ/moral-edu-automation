@@ -1,14 +1,14 @@
 {
-  "version": "1.9.1.2",
-  "notes": "1. 彻底修复设置窗口底部按钮被裁：窗口高度改为按内容自适应（取三个模块中最高需求，任何显示缩放比例都完整显示）",
+  "version": "1.9.2.0",
+  "notes": "1. 寝室页：本周期没收到检查结果的寝室，滑块后挂红色「未发」标，一眼看出哪些还没出结果；AI 写入结果后红标自动消失\n2. AI 设定文档新增「卫生检查结果怎么认」：学校 App 的宿舍路径（滨海校区-西区-柳园-柳园420）自动映射到寝室号 柳420",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.2/deyufen-1.9.1.2-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.2/deyufen-1.9.1.2-win64.zip",
-      "sha256": "e66613199fb782d5d9ca992359fb16fef9588ead103fdf91eede55015eb2d0db",
-      "size": 110624046
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.0/deyufen-1.9.2.0-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.0/deyufen-1.9.2.0-win64.zip",
+      "sha256": "4cea81f75ecb167a68557dc3e56ac78f6e6eb1467d3f989eb2821b726b853ff6",
+      "size": 110626040
     }
   }
 }
