@@ -12,7 +12,7 @@
 ;     卸载完成后用户数据仍在（Inno 默认会删它自己装过的 名单模板.xlsx，必须绕）
 
 #define MyAppName "德育分自动化系统"
-#define MyAppVersion "1.9.4.1"
+#define MyAppVersion "1.9.4.2"
 #define MyAppExeName "德育分自动化系统.exe"
 #define MyAppId "{{8E7C1A52-7F3B-4C21-9A55-1D2C7B0E4F11}"
 
@@ -22,6 +22,9 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=moral-edu-automation
 DefaultDirName={localappdata}\Programs\{#MyAppName}
+; 总是显示"选择安装位置"页：Inno 默认 auto 会因检测到旧安装而隐藏该页并沿用旧目录
+DisableDirPage=no
+UsePreviousAppDir=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 Compression=lzma2/ultra64

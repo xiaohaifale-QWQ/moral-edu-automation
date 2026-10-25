@@ -1,14 +1,14 @@
 {
-  "version": "1.9.4.1",
-  "notes": "1. 修复：上一版（1.9.4.0）安装后版本号仍显示 1.9.3.0 的标注错误——功能不受影响，本版修正版本号",
+  "version": "1.9.4.2",
+  "notes": "1. 修复安装程序不再显示「选择安装位置」页的问题：现在每次安装都会显示路径选择（已装过的电脑会预填上次目录，可自行修改）",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.1/deyufen-1.9.4.1-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.1/deyufen-1.9.4.1-win64.zip",
-      "sha256": "651861e8887c2c8243291233442c873631795fc06d2dc9b67f23a019b6deb701",
-      "size": 110631197
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.2/deyufen-1.9.4.2-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.2/deyufen-1.9.4.2-win64.zip",
+      "sha256": "8c9804e542e5cc3c7e5eda627140ad78b635e7c077dc490a0ebd6fa5fcf6e521",
+      "size": 110630932
     }
   }
 }
