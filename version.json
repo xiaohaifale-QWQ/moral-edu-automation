@@ -1,14 +1,14 @@
 {
-  "version": "1.9.2.1",
-  "notes": "1. 设置窗口不再被拉长：高度跟随当前模块（AI 对接页紧凑，版本页自动变高），切模块窗口随之伸缩\n2. 修复 AI 面板说明文字里的字面换行符显示",
+  "version": "1.9.3.0",
+  "notes": "1. 【新工作流】发一堆寝室检查照片/结果给 AI → 它直接把星级设到寝室页滑块上（AI 设的寝室号青色+「AI已设」标），你核对后点「应用打分」才加减分\n2. 新增 MCP 工具 set_dorm_stars；部分寝室号识别不了也会把认出的先设上并报告\n3. 没收到结果的寝室仍挂红色「未发」标，写入后自动消失",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.1/deyufen-1.9.2.1-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.2.1/deyufen-1.9.2.1-win64.zip",
-      "sha256": "fa62d46c28546884613d581f02f8ac6b3c7df7e1ceff74c9a145caef5c2c563c",
-      "size": 110625432
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.3.0/deyufen-1.9.3.0-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.3.0/deyufen-1.9.3.0-win64.zip",
+      "sha256": "86c0ef95464ea377afc2adac30cb3f48536e77d798f5f6ab5d80cc9db064c33e",
+      "size": 110630783
     }
   }
 }

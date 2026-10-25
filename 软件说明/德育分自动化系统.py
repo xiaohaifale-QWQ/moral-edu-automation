@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.2.1"
+APP_VERSION = "1.9.3.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -376,10 +376,49 @@ class MoralScoreApp:
                       str(batch.get("week", "")))
             if target != self._cycle_key():
                 continue        # 不是当前周期：先留着，等切到那一周再填
+            if batch.get("type") == "dorm_stars":
+                ok = self._apply_ai_dorm_stars(batch)
+                self._archive_ai_file(path, name, ok=ok)
+                continue
             if self._apply_ai_batch(batch):
                 self._archive_ai_file(path, name, ok=True)
             else:
                 self._archive_ai_file(path, name, ok=False)
+
+    def _apply_ai_dorm_stars(self, batch):
+        """AI 卫生检查结果 → 直接设置寝室星级滑块（不写记录）。
+
+        用户在寝室统计页核对（AI 设的寝室号是青色、带「AI已设」标），
+        点「应用打分」后才真正生成星级评定表并加减分。
+        """
+        stars = batch.get("stars")
+        if not isinstance(stars, dict) or not stars:
+            return False
+        applied, unknown = [], []
+        for dorm, star in stars.items():
+            d = str(dorm).strip()
+            v = self.STAR_TEXT_MAP.get(str(star).strip())
+            if v is None and str(star).strip() in ("3", "4", "5"):
+                v = int(str(star).strip())
+            if v is None:
+                unknown.append(f"{dorm}={star}")
+                continue
+            if d not in self.dorm_stars:
+                unknown.append(f"{dorm}（名单里没有这个寝室）")
+                continue
+            self._set_dorm_star(d, v, origin="ai")
+            applied.append(f"{d} {'三四五'[v - 3]}星")
+        if not applied:
+            return False
+        self.show_dorm_view()
+        try:
+            msg = f"AI 已设置 {len(applied)} 个寝室星级（青色标记），核对后点「应用打分」"
+            if unknown:
+                msg += f"；未识别 {len(unknown)} 个"
+            notify(self.root, msg, title="AI 卫生检查", kind="success", duration=10000)
+        except Exception:
+            pass
+        return True
 
     def _apply_ai_batch(self, batch):
         """把一批记录填进 week_data。返回是否真的写入了。"""
@@ -513,9 +552,10 @@ class MoralScoreApp:
         self.last_month_loaded = False
         self.is_first_month = tk.BooleanVar(value=False)
 
-        # 打分面板专用
+        # 打分面板专用（dorm_ai_set：AI 已代设星级的寝室，青色标记，手动改动即清除）
         self.dorm_stars = {}
         self.dorm_controls = {}
+        self.dorm_ai_set = set()
 
         # 撤回 / 重做（限制深度，避免长期使用内存单调增长）
         self.undo_stack = []
@@ -1261,13 +1301,17 @@ class MoralScoreApp:
 
         self.dorm_ai_boxes.clear()
         self.dorm_unrated = {}
+        self.dorm_labels = {}
+        self._rebuild_dorm_ai_rows()
         for idx, dorm in enumerate(sorted(set(self.dorm_map.values()))):
             row, col = divmod(idx, columns)
             cell = ttk.Frame(sf)
             cell.grid(row=row, column=col, sticky="w", padx=(0, 18), pady=6)
             top_row = ttk.Frame(cell)
             top_row.pack(fill="x")
-            ttk.Label(top_row, text=dorm, width=6, anchor="w").pack(side="left")
+            lbl_dorm = ttk.Label(top_row, text=dorm, width=6, anchor="w")
+            lbl_dorm.pack(side="left")
+            self.dorm_labels[dorm] = lbl_dorm
             var = tk.IntVar(value=4)
             self.dorm_stars[dorm] = 4
             seg = SegmentedControl(top_row, [(3, "3星"), (4, "4星"), (5, "5星")], var,
@@ -1654,10 +1698,19 @@ class MoralScoreApp:
             for w in box.winfo_children():
                 w.destroy()
             recs = per_dorm.get(dorm, [])
-            # 红标：该寝室本周期没有任何检查结果
+            ai_set = dorm in getattr(self, "dorm_ai_set", set())
+            # 标记：有记录→无标；AI 已设滑块→青色「AI已设」；两者皆无→红色「未发」
             mark = getattr(self, "dorm_unrated", {}).get(dorm)
             if mark is not None and mark.winfo_exists():
-                mark.config(text="" if recs else "未发")
+                if recs:
+                    mark.config(text="")
+                elif ai_set:
+                    mark.config(text="AI已设", foreground=ACCENT)
+                else:
+                    mark.config(text="未发", foreground="#DC2626")
+            lbl = getattr(self, "dorm_labels", {}).get(dorm)
+            if lbl is not None and lbl.winfo_exists():
+                lbl.config(foreground=(ACCENT if (ai_set and not recs) else INK))
             for r in recs:
                 color = WARN_C if r["fuzzy"] else ACCENT
                 txt = f"AI·{r['name']}({r['tail']})  {r['reason']}  {signed_text(r['score'])}"
@@ -1803,9 +1856,17 @@ class MoralScoreApp:
         label = "月度" if period == "月" else "周"
         self.lbl_dorm_rule.config(text=f"{label}规则：" + "  |  ".join(parts))
 
-    def _set_dorm_star(self, dorm, star):
-        """设置寝室星级。既可由分段控件回调，也可由代码直接调用。"""
+    def _set_dorm_star(self, dorm, star, origin="user"):
+        """设置寝室星级。既可由分段控件回调，也可由代码直接调用。
+
+        origin="ai" 时把该寝室记入 dorm_ai_set（青色标记）；
+        用户手动改滑块会清除该寝室的 AI 标记。
+        """
         self.dorm_stars[dorm] = star
+        if origin == "ai":
+            self.dorm_ai_set.add(dorm)
+        else:
+            self.dorm_ai_set.discard(dorm)
         seg = getattr(self, "dorm_controls", {}).get(dorm)
         if seg is not None and int(seg.variable.get()) != star:
             seg.variable.set(star)   # 触发 SegmentedControl 自行同步高亮
@@ -3211,6 +3272,8 @@ class MoralScoreApp:
         """
         if not getattr(self, "dorm_controls", None):
             return 0
+        self.dorm_ai_set = getattr(self, "dorm_ai_set", set())
+        self.dorm_ai_set.clear()      # 换周期后 AI 代设的星级作废
         for dorm, seg in self.dorm_controls.items():
             self.dorm_stars[dorm] = 4
             if int(seg.variable.get()) != 4:

@@ -841,6 +841,83 @@ def tool_add_records(args):
     return text_result("\n".join(lines))
 
 
+def tool_set_dorm_stars(args):
+    """把卫生检查结果直接发到软件「寝室统计」页的星级滑块上（不写记录）。
+
+    用户核对后自己点「应用打分」才会真正加减分。
+    """
+    raw = args.get("stars")
+    if not isinstance(raw, dict) or not raw:
+        return text_result("stars 需要是 {寝室号: 星级} 的对象，例如 "
+                           '{"柳412": "五星", "梅412": "三星"}', True)
+
+    # 模板里真实存在的寝室号（走名单缓存，未知=没分到寝室的不算）
+    rooms = {it["dorm"] for it in load_roster() if it.get("dorm") != "未知"}
+
+    star_map = dict(STAR_TEXT_MAP)
+    star_map.update({"三": 3, "四": 4, "五": 5})
+
+    stars, problems = {}, []
+    for dorm, star in raw.items():
+        d = clean(dorm)
+        key = clean(star)
+        value = star_map.get(key) or (int(key) if key in ("3", "4", "5") else None)
+        if value is None:
+            problems.append(f"{d or '（空寝室号）'}：星级「{star}」不认识（可用 五星/四星/三星 或 5/4/3）")
+            continue
+        if not d:
+            problems.append("寝室号为空")
+            continue
+        matched = [r for r in rooms if r == d]
+        if not matched:
+            problems.append(f"{d}：名单里没有这个寝室（模板里是：{'、'.join(sorted(rooms))}）")
+            continue
+        stars[d] = value
+
+    # 部分识别也照常写入有效的（未识别的留给用户补报，软件里挂红色「未发」标）；
+    # 一个有效的都没有才报错。
+    if not stars:
+        lines = ["一个寝室都没识别出来，没有写入。"]
+        if problems:
+            lines += [f"  - {x}" for x in problems]
+        lines.append("")
+        lines.append("寝室号是「园区首字+房号」，如 柳412 / 梅420。"
+                     "学校 App 里的「柳园420」对应 柳420。")
+        return text_result("\n".join(lines), True)
+
+    state = read_app_state()
+    year = int(args.get("year") or state.get("year") or datetime.datetime.now().year)
+    month = int(args.get("month") or state.get("month") or datetime.datetime.now().month)
+    week = int(args.get("week") or state.get("week") or 1)
+    batch_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    write_json_atomic(os.path.join(INBOX_DIR, f"{batch_id}.json"), {
+        "id": batch_id,
+        "year": year, "month": month, "week": week,
+        "created": datetime.datetime.now().isoformat(timespec="seconds"),
+        "source": "mcp",
+        "type": "dorm_stars",
+        "stars": stars,
+    })
+
+    same_cycle = (str(state.get("year")) == str(year)
+                  and str(state.get("month")) == str(month)
+                  and str(state.get("week")) == str(week))
+    lines = [f"已把 {len(stars)} 个寝室的星级发给软件："]
+    lines += [f"  {d} {'三四五'[v - 3]}星" for d, v in sorted(stars.items())]
+    if problems:
+        lines.append(f"未识别 {len(problems)} 个（没有写入，软件里会保持红色「未发」标）：")
+        lines += [f"  - {x}" for x in problems]
+    lines.append("")
+    lines.append("这些星级直接设在「寝室统计」页的滑块上（寝室号显示为青色），"
+                 "用户核对后点「应用打分」才会真正加减分并生成表格。")
+    if not state.get("running"):
+        lines.append("软件当前没有运行，已排队；打开软件并切到对应周次后会自动设上。")
+    elif not same_cycle:
+        lines.append(f"注意：软件界面现在停在 {state.get('year')}年{state.get('month')}月"
+                     f"第{state.get('week')}周，切换到目标周次后才会设上。")
+    return text_result("\n".join(lines))
+
+
 TOOLS = [
     {
         "name": "add_records",
@@ -883,6 +960,29 @@ TOOLS = [
                 "note": {"type": "string", "description": "备注，便于日后追溯"},
             },
             "required": ["records"],
+        },
+    },
+    {
+        "name": "set_dorm_stars",
+        "description": "【寝室卫生检查结果专用】把一批寝室的星级直接设到软件「寝室统计」页的"
+                       "滑块上（不写加减分记录），用户核对后自己点「应用打分」。"
+                       "收到一批寝室检查照片/结果时优先用这个，不要用 add_records 逐人写寝室分。"
+                       "寝室号是「园区首字+房号」：学校 App 里的「柳园420」对应 柳420。"
+                       "星级可用 五星/四星/三星 或 5/4/3。没报结果的寝室不要写，"
+                       "软件会标红色「未发」提醒。year/month/week 省略=软件当前周期。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "stars": {
+                    "type": "object",
+                    "description": "寝室号 → 星级，如 {\"柳412\": \"五星\", \"梅412\": \"三星\"}",
+                    "additionalProperties": {"type": "string"},
+                },
+                "year": {"type": "integer", "description": "目标年份，省略=软件当前周期"},
+                "month": {"type": "integer", "description": "目标月份，省略=软件当前周期"},
+                "week": {"type": "integer", "description": "目标周次，省略=软件当前周期"},
+            },
+            "required": ["stars"],
         },
     },
     {
@@ -941,6 +1041,7 @@ HANDLERS = {
     "get_score_rules": tool_get_score_rules,
     "get_month_summary": tool_get_month_summary,
     "add_records": tool_add_records,
+    "set_dorm_stars": tool_set_dorm_stars,
 }
 
 
