@@ -1,14 +1,14 @@
 {
-  "version": "1.9.1.1",
-  "notes": "1. 修复设置窗口按钮在部分电脑（高缩放/小屏）显示不全：按钮改为换行布局、提示文字独立成行、窗口尺寸按屏幕自适应",
+  "version": "1.9.1.2",
+  "notes": "1. 彻底修复设置窗口底部按钮被裁：窗口高度改为按内容自适应（取三个模块中最高需求，任何显示缩放比例都完整显示）",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.1/deyufen-1.9.1.1-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.1/deyufen-1.9.1.1-win64.zip",
-      "sha256": "67fa2cf37d46b5a8f2a852671fa2bf3703fcdc4b6e0a0c9aa97493764327b59d",
-      "size": 110623467
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.2/deyufen-1.9.1.2-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.1.2/deyufen-1.9.1.2-win64.zip",
+      "sha256": "e66613199fb782d5d9ca992359fb16fef9588ead103fdf91eede55015eb2d0db",
+      "size": 110624046
     }
   }
 }
