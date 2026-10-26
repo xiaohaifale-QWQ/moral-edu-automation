@@ -192,37 +192,44 @@ def load_week_records(year, month, week, roster):
             return result, True
         ws = wb[sheet]
 
-        sig_row = ws.max_row + 1
-        for r in range(4, ws.max_row + 1):
-            texts = [clean(ws.cell(r, c).value) for c in range(1, 9)]
-            if any("考评" in t or "签名" in t for t in texts):
-                sig_row = r
-                break
+        # 签名栏边界按栏独立：左栏看 A/B（班主任签名在 A），右栏看 E/F
+        # （考评小组签名合并格在 E）。全局截断会漏掉与签名区同行的最后一行学生。
+        def _sig_row(cols):
+            for r in range(4, ws.max_row + 1):
+                for c in cols:
+                    t = clean(ws.cell(r, c).value)
+                    if "考评" in t or "签名" in t:
+                        return r
+            return ws.max_row + 1
+        sig_row_left = _sig_row((1, 2))
+        sig_row_right = _sig_row((5, 6))
 
         left = right = None
-        for r in range(4, sig_row):
-            cell_l = clean(ws.cell(r, 1).value)
-            if cell_l:
-                left = cell_l
-            if left in result:
-                score = ws.cell(r, 3).value
-                reason = clean(ws.cell(r, 4).value)
-                if score is not None and clean(score) != "":
-                    try:
-                        result[left].append({"score": float(score), "reason": reason})
-                    except (TypeError, ValueError):
-                        pass
-            cell_r = clean(ws.cell(r, 5).value)
-            if cell_r:
-                right = cell_r
-            if right in result:
-                score = ws.cell(r, 7).value
-                reason = clean(ws.cell(r, 8).value)
-                if score is not None and clean(score) != "":
-                    try:
-                        result[right].append({"score": float(score), "reason": reason})
-                    except (TypeError, ValueError):
-                        pass
+        for r in range(4, ws.max_row + 1):
+            if r < sig_row_left:
+                cell_l = clean(ws.cell(r, 1).value)
+                if cell_l:
+                    left = cell_l
+                if left in result:
+                    score = ws.cell(r, 3).value
+                    reason = clean(ws.cell(r, 4).value)
+                    if score is not None and clean(score) != "":
+                        try:
+                            result[left].append({"score": float(score), "reason": reason})
+                        except (TypeError, ValueError):
+                            pass
+            if r < sig_row_right:
+                cell_r = clean(ws.cell(r, 5).value)
+                if cell_r:
+                    right = cell_r
+                if right in result:
+                    score = ws.cell(r, 7).value
+                    reason = clean(ws.cell(r, 8).value)
+                    if score is not None and clean(score) != "":
+                        try:
+                            result[right].append({"score": float(score), "reason": reason})
+                        except (TypeError, ValueError):
+                            pass
         return result, True
     finally:
         if wb:
@@ -963,6 +970,55 @@ def tool_undo_last(args):
         "如果软件提示撤回栈是空的，说明中途切过周期——撤回快照只在同一周期内有效。")
 
 
+SCREENSHOT_RESULT = os.path.join(BRIDGE_DIR, "screenshot_result.json")
+
+
+def tool_screenshot_tables(args):
+    """让软件把周纪实表/月度总表截图（PNG），存到当月文件夹的「截图」目录。"""
+    import time as _t
+    target = clean(args.get("target")) or "全部"
+    if target not in ("周", "月", "全部"):
+        return text_result(f"target 只能是 周 / 月 / 全部，收到：{target}", True)
+    state = read_app_state()
+    if not state.get("running"):
+        return text_result("软件当前没有运行，无法截图。请先打开德育分自动化系统。", True)
+    try:
+        if os.path.exists(SCREENSHOT_RESULT):
+            os.remove(SCREENSHOT_RESULT)
+    except Exception:
+        pass
+    year = int(args.get("year") or state.get("year") or datetime.datetime.now().year)
+    month = int(args.get("month") or state.get("month") or datetime.datetime.now().month)
+    week = int(args.get("week") or state.get("week") or 1)
+    batch_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    write_json_atomic(os.path.join(INBOX_DIR, f"{batch_id}.json"), {
+        "id": batch_id,
+        "year": year, "month": month, "week": week,
+        "created": datetime.datetime.now().isoformat(timespec="seconds"),
+        "source": "mcp",
+        "type": "screenshot",
+        "target": target,
+    })
+    deadline = _t.time() + 15
+    result = None
+    while _t.time() < deadline:
+        r = read_json(SCREENSHOT_RESULT)
+        if isinstance(r, dict) and r:
+            result = r
+            break
+        _t.sleep(0.5)
+    if not result:
+        return text_result("截图请求已发出，但 15 秒内没等到软件回执（软件可能没响应）。", True)
+    if not result.get("ok"):
+        return text_result(f"软件截图失败：{result.get('error')}", True)
+    files = result.get("files") or []
+    lines = [f"已截图 {len(files)} 张，保存在当月文件夹的「截图」子目录："]
+    lines += [f"  {os.path.basename(f)}" for f in files]
+    lines.append("")
+    lines.append("软件界面同时会有 toast 提示。可以用读图工具打开截图核对分数。")
+    return text_result("\n".join(lines))
+
+
 TOOLS = [
     {
         "name": "add_records",
@@ -1034,6 +1090,19 @@ TOOLS = [
                 "week": {"type": "integer", "description": "目标周次，省略=软件当前周期"},
             },
             "required": ["stars"],
+        },
+    },
+    {
+        "name": "screenshot_tables",
+        "description": "【截图核对专用】让软件把「周纪实表」和/或「月度总表」的表格区域截图成 PNG，"
+                       "存到当月文件夹的「截图」子目录，并返回文件名列表。用户说「截图一下」「我要看表」"
+                       "或你想核对表里的分数时用。需要软件正在运行且已生成过周表/月表。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string",
+                           "description": "周=只截周纪实表；月=只截月度总表；全部=两张都截。默认 全部"},
+            },
         },
     },
     {
@@ -1110,6 +1179,7 @@ HANDLERS = {
     "add_records": tool_add_records,
     "set_dorm_stars": tool_set_dorm_stars,
     "undo_last": tool_undo_last,
+    "screenshot_tables": tool_screenshot_tables,
 }
 
 

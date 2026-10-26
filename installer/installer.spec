@@ -35,7 +35,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='德育分自动化系统-安装程序-1.10.0.0',
+    name='德育分自动化系统-安装程序-1.10.1.0',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

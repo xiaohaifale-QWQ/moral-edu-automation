@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.10.0.0"
+APP_VERSION = "1.10.1.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -385,6 +385,10 @@ class MoralScoreApp:
                 ok = self._apply_ai_undo(batch)
                 self._archive_ai_file(path, name, ok=ok)
                 continue
+            if batch_type == "screenshot":
+                ok = self._apply_ai_screenshot(batch)
+                self._archive_ai_file(path, name, ok=ok, tag="shot")
+                continue
             if self._is_batch_applied(batch):
                 # 同一批被重发（AI 重试/网络重传）：归档留痕，绝不重复写入
                 self._archive_ai_file(path, name, tag="dup")
@@ -705,6 +709,10 @@ class MoralScoreApp:
         # 设置按钮：带边框的长方形条（外层 1px 描边 + 悬停浅青）
         from tkwebui.core import PALETTE
         _sb = PALETTE["sidebar"]
+        self.btn_open_dir = ttk.Button(side_foot, text="打开文件夹",
+                                       style="SidebarRect.TButton",
+                                       command=self.open_data_folder)
+        self.btn_open_dir.pack(fill="x", pady=(6, 0))
         set_edge = tk.Frame(side_foot, bg="#C9D4D0", padx=1, pady=1)
         set_edge.pack(fill="x", pady=(6, 0))
         set_inner = tk.Frame(set_edge, bg=_sb)
@@ -1165,9 +1173,9 @@ class MoralScoreApp:
 
         self.btn_inquiry = ttk.Button(bar, text="查加分标准", command=self.toggle_score_inquiry)
         self.btn_inquiry.pack(side="left", padx=(0, 6))
-        self.btn_undo = ttk.Button(bar, text="撤回", state="disabled", command=self.undo_last_action)
+        self.btn_undo = ttk.Button(bar, text="左撤回", state="disabled", command=self.undo_last_action)
         self.btn_undo.pack(side="left", padx=(0, 6))
-        self.btn_redo = ttk.Button(bar, text="重做", state="disabled", command=self.redo_last_action)
+        self.btn_redo = ttk.Button(bar, text="右撤回", state="disabled", command=self.redo_last_action)
         self.btn_redo.pack(side="left", padx=(0, 6))
         # 「刷新模板」收进设置；「班级名单」入口由 拖入 / 设置·添加模板 取代
 
@@ -1200,6 +1208,8 @@ class MoralScoreApp:
         # ---------- 底部操作（先占位，避免被表格挤出可视区） ----------
         foot = ttk.Frame(self.frame_week)
         foot.pack(side="bottom", fill="x", pady=(14, 0))
+        ttk.Button(foot, text="截图", command=lambda: self.screenshot_tree(
+            self.tree_week, f"周纪实表截图_{self.class_name}{self.current_month.get()}月第{self.current_week.get()}周")).pack(side="left", padx=(12, 0))
         ttk.Button(foot, text="生成周表", style="Primary.TButton",
                    command=self.save_week_data).pack(side="left")
         ttk.Label(foot, text="按当前周次生成周纪实表（月度汇总需重新读取后才更新）",
@@ -1305,6 +1315,8 @@ class MoralScoreApp:
         self.btn_generate_month = ttk.Button(foot, text="请先完成上方两个步骤", style="Primary.TButton",
                                              state="disabled", command=self.save_month_data)
         self.btn_generate_month.pack(side="left")
+        ttk.Button(foot, text="截图", command=lambda: self.screenshot_tree(
+            self.tree_month, f"月度总表截图_{self.class_name}{self.current_month.get()}月")).pack(side="left", padx=(12, 0))
         ttk.Label(foot, text="按当前周期生成月度总表", style="Muted.TLabel").pack(side="left", padx=(14, 0))
 
         card = SectionCard(self.frame_month, text="本月分数累加预览")
@@ -3448,28 +3460,35 @@ class MoralScoreApp:
                 if s_name in wb.sheetnames:
                     ws = wb[s_name]
 
-                    sig_row = ws.max_row + 1
-                    for r in range(4, ws.max_row + 1):
-                        row_vals = [str(ws.cell(row=r, column=c).value) for c in range(1, 9)]
-                        if any("考评" in v or "签名" in v for v in row_vals if v != 'None'):
-                            sig_row = r
-                            break
+                    # 签名栏边界按栏独立：左栏看 A/B（班主任签名在 A），
+                    # 右栏看 E/F（考评小组签名合并格在 E）。全局截断会漏掉
+                    # 与签名区同行的最后一行学生（王小领 bug）。
+                    def _sig_row(cols):
+                        for r in range(4, ws.max_row + 1):
+                            for c in cols:
+                                v = str(ws.cell(row=r, column=c).value or "")
+                                if ("签名" in v) or ("考评" in v):
+                                    return r
+                        return ws.max_row + 1
+                    sig_row_left = _sig_row((1, 2))
+                    sig_row_right = _sig_row((5, 6))
 
                     active_l_sid = None
                     active_r_sid = None
-                    for r in range(4, sig_row):
-                        l_id_cell = ws.cell(row=r, column=1).value
-                        if l_id_cell is not None and str(l_id_cell).strip() != "":
-                            active_l_sid = self.clean_val(l_id_cell)
-                        if active_l_sid and active_l_sid in self.week_data:
-                            sc = ws.cell(row=r, column=3).value
-                            rn = ws.cell(row=r, column=4).value
-                            num = self._to_number(sc)
-                            if num is not None:
-                                self.week_data[active_l_sid]['records'].append(
-                                    (num, self.scrub_ghost_data(rn)))
+                    for r in range(4, ws.max_row + 1):
+                        if r < sig_row_left:
+                            l_id_cell = ws.cell(row=r, column=1).value
+                            if l_id_cell is not None and str(l_id_cell).strip() != "":
+                                active_l_sid = self.clean_val(l_id_cell)
+                            if active_l_sid and active_l_sid in self.week_data:
+                                sc = ws.cell(row=r, column=3).value
+                                rn = ws.cell(row=r, column=4).value
+                                num = self._to_number(sc)
+                                if num is not None:
+                                    self.week_data[active_l_sid]['records'].append(
+                                        (num, self.scrub_ghost_data(rn)))
 
-                        if ws.max_column >= 7:
+                        if ws.max_column >= 7 and r < sig_row_right:
                             r_id_cell = ws.cell(row=r, column=5).value
                             if r_id_cell is not None and str(r_id_cell).strip() != "":
                                 active_r_sid = self.clean_val(r_id_cell)
@@ -4194,23 +4213,32 @@ class MoralScoreApp:
                 if "周" in sht:
                     found_weeks += 1
                     ws = wb[sht]
-                    sig_row = ws.max_row + 1
-                    for r in range(4, ws.max_row + 1):
-                        row_vals = [str(ws.cell(row=r, column=c).value) for c in range(1, 9)]
-                        if any("考评" in v or "签名" in v for v in row_vals if v != 'None'):
-                            sig_row = r;
-                            break
+                    # 签名栏边界按栏独立判断：左栏看 A/B 列（班主任签名在 A），
+                    # 右栏看 E/F 列（考评小组签名合并格在 E）。全局"任一列出现
+                    # 签名就停"会误伤与签名区同行的左/右栏最后一行学生（王小领 bug）。
+                    def _sig_row(cols):
+                        for r in range(4, ws.max_row + 1):
+                            for c in cols:
+                                v = str(ws.cell(row=r, column=c).value or "")
+                                if ("签名" in v) or ("考评" in v):
+                                    return r
+                        return ws.max_row + 1
+                    sig_row_left = _sig_row((1, 2))
+                    sig_row_right = _sig_row((5, 6))
                     active_l_id = None
                     active_r_id = None
-                    for r in range(4, sig_row):
-                        c1_val = ws.cell(row=r, column=1).value
-                        if c1_val is not None and str(c1_val).strip() != "":
-                            active_l_id = self.clean_val(c1_val)
-                        if active_l_id and active_l_id in self.month_sum:
-                            num = self._to_number(ws.cell(row=r, column=3).value)
-                            if num is not None:
-                                self.month_sum[active_l_id] += num
-                        if ws.max_column >= 7:
+                    for r in range(4, ws.max_row + 1):
+                        if r >= sig_row_left:
+                            active_l_id = None      # 左栏已进签名区
+                        else:
+                            c1_val = ws.cell(row=r, column=1).value
+                            if c1_val is not None and str(c1_val).strip() != "":
+                                active_l_id = self.clean_val(c1_val)
+                            if active_l_id and active_l_id in self.month_sum:
+                                num = self._to_number(ws.cell(row=r, column=3).value)
+                                if num is not None:
+                                    self.month_sum[active_l_id] += num
+                        if ws.max_column >= 7 and r < sig_row_right:
                             c5_val = ws.cell(row=r, column=5).value
                             if c5_val is not None and str(c5_val).strip() != "":
                                 active_r_id = self.clean_val(c5_val)
@@ -4301,6 +4329,85 @@ class MoralScoreApp:
             self.tree_month.insert("", "end", values=(sid, name, self._fmt_score(base_sc),
                                                       self._fmt_score(add_sc),
                                                       self._fmt_score(total)))
+
+    def _capture_table_png(self, tree, base_name):
+        """把表格控件"有字的部分"截成 PNG，存到当月生成表文件夹的「截图」子目录。
+
+        返回保存路径；失败抛异常由调用方提示。
+        """
+        from PIL import ImageGrab
+        tree.update_idletasks()
+        try:
+            tree.yview_moveto(0)          # 回到顶部，保证表头与首行可见
+            tree.update_idletasks()
+        except Exception:
+            pass
+        children = tree.get_children("")
+        x, y = tree.winfo_rootx(), tree.winfo_rooty()
+        w = tree.winfo_width()
+        h = tree.winfo_height()
+        if children:
+            last = tree.bbox(children[-1])
+            if last:
+                h = min(h, last[1] + last[3] + 4)   # 只截到最后一行内容底部
+        img = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
+        folder = os.path.join(self.get_folder_path(), "截图")
+        os.makedirs(folder, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = os.path.join(folder, f"{base_name}_{stamp}.png")
+        img.save(path)
+        return path
+
+    def screenshot_tree(self, tree, base_name):
+        """截图按钮入口：成功给 toast（带打开文件夹），失败弹窗。"""
+        try:
+            path = self._capture_table_png(tree, base_name)
+        except Exception as exc:
+            return messagebox.showerror("截图失败", f"{exc}")
+        try:
+            notify(self.root, f"截图已保存：{path}",
+                   title="截图完成", kind="success", duration=8000,
+                   action=("打开文件夹", lambda p=os.path.dirname(path): self._open_folder(p)))
+        except Exception:
+            pass
+
+    def open_data_folder(self):
+        """侧边栏「打开文件夹」：打开程序数据目录（名单模板与生成表都在这里）。"""
+        self._open_folder(self._base_dir())
+
+    def _apply_ai_screenshot(self, batch):
+        """AI 请求截图：target 周/月/全部，结果路径写入 screenshot_result.json 供 AI 读取。"""
+        target = str(batch.get("target") or "全部")
+        results = []
+        try:
+            if target in ("周", "全部"):
+                results.append(self._capture_table_png(
+                    self.tree_week,
+                    f"周纪实表截图_{self.class_name}{self.current_month.get()}月第{self.current_week.get()}周"))
+            if target in ("月", "全部"):
+                results.append(self._capture_table_png(
+                    self.tree_month,
+                    f"月度总表截图_{self.class_name}{self.current_month.get()}月"))
+        except Exception as exc:
+            try:
+                with open(os.path.join(self._bridge_dir(), "screenshot_result.json"),
+                          "w", encoding="utf-8") as f:
+                    json.dump({"ok": False, "error": str(exc)}, f, ensure_ascii=False)
+            except Exception:
+                pass
+            return False
+        try:
+            with open(os.path.join(self._bridge_dir(), "screenshot_result.json"),
+                      "w", encoding="utf-8") as f:
+                json.dump({"ok": True, "files": results}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+        try:
+            notify(self.root, f"已按 AI 要求截图 {len(results)} 张（存在「截图」文件夹）",
+                   title="AI 截图", kind="success", duration=6000)
+        except Exception:
+            pass
+        return True
 
     def save_month_data(self):
         folder = self.get_folder_path()
