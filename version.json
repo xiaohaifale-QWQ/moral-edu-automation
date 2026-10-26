@@ -1,14 +1,14 @@
 {
-  "version": "1.10.1.0",
-  "notes": "1.【修】月度统计漏算左栏最后一行学生（王小领 +1 丢失的边界 bug）：周表回读、月度扫描、AI get_week_records 三处签名栏边界改为按左/右栏独立判断\n2.【新】周纪实表/月度总表页各加「截图」按钮：只截有内容的部分，PNG 存到当月文件夹「截图」子目录\n3.【新】MCP 工具 screenshot_tables：对 AI 说「截图一下」它就能截图并告诉你文件名\n4.【新】侧边栏「打开文件夹」按钮（直达名单模板与生成表目录）\n5.【改】撤回/重做按钮更名 左撤回/右撤回",
+  "version": "2.1.0.2",
+  "notes": "1.【修】月度统计漏算左栏最后一行学生（王小领 +1 丢失的边界 bug）——周表回读、月度扫描、AI get_week_records 三处同步修复\n2.【新】周纪实表/月度总表「截图」按钮升级：直接渲染生成的 Excel 文件为 300dpi 高清完整长图（含全部内容与签名区），不再截屏幕\n3.【新】MCP 工具 screenshot_tables：对 AI 说「截图一下」它就能截图并告诉你文件名\n4.【新】侧边栏「打开文件夹」按钮：直达本月生成表大文件夹\n5.【改】撤回/重做按钮更名 左撤回/右撤回\n6.【修】安装器在装过的电脑上不再跳过路径选择页",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.10.1.0/deyufen-1.10.1.0-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.10.1.0/deyufen-1.10.1.0-win64.zip",
-      "sha256": "c2b45fffc92b6f9d567f91b5e2344e00252f42a32e600fcbe89ef35f1e03c166",
-      "size": 110653597
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v2.1.0.2/deyufen-2.1.0.2-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v2.1.0.2/deyufen-2.1.0.2-win64.zip",
+      "sha256": "74b9528a6435f9cec41be5cefda5719e6f8ac9c0adc61fc6e3cfe5e9a40a10e1",
+      "size": 110660053
     }
   }
 }

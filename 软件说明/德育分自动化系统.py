@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import ast
+import glob
 import hashlib
 import json
 import math
@@ -28,7 +29,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.10.1.0"
+APP_VERSION = "2.1.0.2"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -3430,6 +3431,7 @@ class MoralScoreApp:
             self.week_data[sid]['records'] = []
 
         # 换了周期，上一周期的撤回快照不再适用（撤回会把别的周的数据搬过来）
+        had_undo = bool(self.undo_stack)
         self.undo_stack.clear()
         self.redo_stack.clear()
         if hasattr(self, "btn_undo"):
@@ -3501,6 +3503,7 @@ class MoralScoreApp:
                                         (num, self.scrub_ghost_data(rn)))
 
                     self.week_status.config(text=f"已读取 {s_name} 的历史记录", foreground=OK_C)
+                    self._week_file_existed = True
                 else:
                     self.week_status.config(text=f"{s_name} 暂无记录，将新建", foreground=WARN_C)
             except Exception as e:
@@ -3508,6 +3511,7 @@ class MoralScoreApp:
             finally:
                 if wb: wb.close()
         else:
+            self._week_file_existed = False
             self.week_status.config(text="周表尚未创建", foreground=WARN_C)
 
         # 上一周期收到的寝室检查次数不能跟着走，否则上周的五星会被算进这周
@@ -3516,6 +3520,8 @@ class MoralScoreApp:
 
         # 星级选择跟着周次走，避免把上一周选的星级打到这一周
         self._sync_dorm_stars()
+        if had_undo:
+            self.week_status.config(text="已切换周期（原撤回栈已清空）", foreground=WARN_C)
         if not self.showing_inquiry:
             self.refresh_week_tree()
         if self.current_view == "month":
@@ -4011,6 +4017,10 @@ class MoralScoreApp:
         folder = self.get_folder_path()
         if not os.path.exists(folder): os.makedirs(folder, exist_ok=True)
         file_path = os.path.join(folder, self.get_week_file_name())
+        # 外部删除检测：加载时表还在、现在没了 → 明确提示，避免"记录复活"的困惑
+        if getattr(self, "_week_file_existed", False) and not os.path.exists(file_path):
+            notify(self.root, "磁盘上的本周周表已被外部删除，本次生成将按当前内容重建。",
+                   title="检测到外部删除", kind="warn", duration=10000)
         m, w = self.current_month.get(), self.current_week.get()
         s_name = f"第{w}周"
 
@@ -4330,15 +4340,31 @@ class MoralScoreApp:
                                                       self._fmt_score(add_sc),
                                                       self._fmt_score(total)))
 
-    def _capture_table_png(self, tree, base_name):
-        """把表格控件"有字的部分"截成 PNG，存到当月生成表文件夹的「截图」子目录。
+    def _find_dsoffice(self):
+        """找 DeepSeek Harness 的 LibreOffice Kit（渲染 Excel 效果图用）。
 
-        返回保存路径；失败抛异常由调用方提示。
+        返回 (node, cli) 或 None。用户机器装了 DeepSeek Harness 就有。
         """
+        if getattr(self, "_dsoffice_cache", None):
+            return self._dsoffice_cache
+        import glob
+        node = r"D:\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\node\bin\node.exe"
+        cli = r"D:\DeepSeek Harness\resources\app.asar.unpacked\dsh\node_modules\@deepseek-ai\libreoffice-kit\lib\cli.js"
+        if os.path.exists(node) and os.path.exists(cli):
+            self._dsoffice_cache = (node, cli)
+            return self._dsoffice_cache
+        for n in glob.glob(r"D:\DeepSeek Harness\resources\runtime\*\dependencies\node\bin\node.exe"):
+            for c in glob.glob(r"D:\DeepSeek Harness\resources\app.asar.unpacked\dsh\node_modules\@deepseek-ai\libreoffice-kit\lib\cli.js"):
+                self._dsoffice_cache = (n, c)
+                return self._dsoffice_cache
+        return None
+
+    def _capture_table_png(self, tree, base_name):
+        """回退方案：屏幕截取表格控件当前可见区域（渲染组件不可用时）。"""
         from PIL import ImageGrab
         tree.update_idletasks()
         try:
-            tree.yview_moveto(0)          # 回到顶部，保证表头与首行可见
+            tree.yview_moveto(0)
             tree.update_idletasks()
         except Exception:
             pass
@@ -4349,7 +4375,7 @@ class MoralScoreApp:
         if children:
             last = tree.bbox(children[-1])
             if last:
-                h = min(h, last[1] + last[3] + 4)   # 只截到最后一行内容底部
+                h = min(h, last[1] + last[3] + 4)
         img = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
         folder = os.path.join(self.get_folder_path(), "截图")
         os.makedirs(folder, exist_ok=True)
@@ -4358,22 +4384,134 @@ class MoralScoreApp:
         img.save(path)
         return path
 
-    def screenshot_tree(self, tree, base_name):
-        """截图按钮入口：成功给 toast（带打开文件夹），失败弹窗。"""
+    def _render_sheet_png(self, xlsx_path, sheet, base_name):
+        """把 xlsx 里指定工作表渲染成高清 PNG（LibreOffice Kit 300 DPI）。
+
+        多页时纵向拼接为一张长图。返回保存路径；渲染器不可用抛 RuntimeError。
+        """
+        from PIL import Image
+        kit = self._find_dsoffice()
+        if not kit:
+            raise RuntimeError("未找到渲染组件（LibreOffice Kit）")
+        node, cli = kit
+        if not os.path.exists(xlsx_path):
+            raise FileNotFoundError(f"找不到生成表文件：{xlsx_path}")
+        wb = openpyxl.load_workbook(xlsx_path, read_only=True)
         try:
-            path = self._capture_table_png(tree, base_name)
+            if sheet not in wb.sheetnames:
+                raise ValueError(f"工作表「{sheet}」不存在（现有：{'、'.join(wb.sheetnames)}）")
+            ws = wb[sheet]
+            max_row, max_col = ws.max_row, ws.max_column
+        finally:
+            wb.close()
+        from openpyxl.utils import get_column_letter
+        rng = f"A1:{get_column_letter(max_col)}{max_row}"
+        out_root = os.path.join(self.get_folder_path(), "截图")
+        os.makedirs(out_root, exist_ok=True)
+        tmp = os.path.join(out_root, f".render-{datetime.datetime.now().strftime('%H%M%S%f')}")
+        flags = 0x08000000  # CREATE_NO_WINDOW
+        proc = subprocess.run([node, cli, "render", "--input", xlsx_path,
+                               "--output-dir", tmp, "--sheet", sheet,
+                               "--range", rng, "--dpi", "300"],
+                              capture_output=True, timeout=240, creationflags=flags)
+        pages = sorted(glob.glob(os.path.join(tmp, "page-*.png")))
+        if not pages:
+            err = (proc.stderr or b"").decode("utf-8", "replace")[-200:]
+            raise RuntimeError(f"渲染失败：{err or '无输出'}")
+        imgs = [Image.open(pg).convert("RGB") for pg in pages]
+        if len(imgs) == 1:
+            final_img = imgs[0]
+        else:
+            gap = 6
+            total_w = max(im.width for im in imgs)
+            total_h = sum(im.height for im in imgs) + gap * (len(imgs) - 1)
+            final_img = Image.new("RGB", (total_w, total_h), "#FFFFFF")
+            yy = 0
+            for im in imgs:
+                final_img.paste(im, (0, yy))
+                yy += im.height + gap
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        final = os.path.join(out_root, f"{base_name}_{stamp}.png")
+        final_img.save(final)
+        for im in imgs:
+            im.close()
+        shutil.rmtree(tmp, ignore_errors=True)
+        return final
+
+    def screenshot_tree(self, tree, base_name, mode="preview"):
+        """截图入口：渲染生成的 Excel 文件（内容完整，首选）；
+        渲染组件不可用时回退为屏幕截取预览。"""
+        # 判断目标文件
+        is_week = base_name.startswith("周纪实表截图")
+        try:
+            if is_week:
+                xlsx = os.path.join(self.get_folder_path(), self.get_week_file_name())
+                sheet = f"第{self.current_week.get()}周"
+            else:
+                xlsx = os.path.join(self.get_folder_path(), self.get_month_file_name())
+                sheet = f"{self.current_month.get()}月总表"
+            path = self._render_sheet_png(xlsx, sheet, base_name)
+            kind = "success"
+            msg = f"已生成表格图片：{path}"
         except Exception as exc:
-            return messagebox.showerror("截图失败", f"{exc}")
+            # 回退：屏幕截取预览区
+            try:
+                path = self._capture_table_png(tree, base_name)
+                kind = "warn"
+                msg = f"渲染组件不可用，已截取屏幕预览：{path}"
+            except Exception as exc2:
+                return messagebox.showerror("截图失败", f"渲染：{exc}\n截屏：{exc2}")
         try:
-            notify(self.root, f"截图已保存：{path}",
-                   title="截图完成", kind="success", duration=8000,
+            notify(self.root, msg, title="截图完成", kind=kind, duration=8000,
                    action=("打开文件夹", lambda p=os.path.dirname(path): self._open_folder(p)))
         except Exception:
             pass
 
+    def _apply_ai_screenshot(self, batch):
+        """AI 请求截图：渲染生成的 Excel 为高清 PNG，结果路径写入
+        screenshot_result.json 供 AI 读取。"""
+        target = str(batch.get("target") or "全部")
+        results, errors = [], []
+
+        def do(target_kind, xlsx, sheet, base):
+            try:
+                results.append(self._render_sheet_png(xlsx, sheet, base))
+            except Exception as exc:
+                errors.append(f"{target_kind}: {exc}")
+
+        if target in ("周", "全部"):
+            do("周", os.path.join(self.get_folder_path(), self.get_week_file_name()),
+               f"第{self.current_week.get()}周",
+               f"周纪实表截图_{self.class_name}{self.current_month.get()}月第{self.current_week.get()}周")
+        if target in ("月", "全部") or (target == "月"):
+            do("月", os.path.join(self.get_folder_path(), self.get_month_file_name()),
+               f"{self.current_month.get()}月总表",
+               f"月度总表截图_{self.class_name}{self.current_month.get()}月")
+        ok = bool(results)
+        try:
+            with open(os.path.join(self._bridge_dir(), "screenshot_result.json"),
+                      "w", encoding="utf-8") as f:
+                json.dump({"ok": ok,
+                           "files": results,
+                           "errors": errors}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+        try:
+            if ok:
+                notify(self.root, f"已按 AI 要求生成 {len(results)} 张表格图片（截图文件夹）",
+                       title="AI 截图", kind="success", duration=6000)
+        except Exception:
+            pass
+        return ok
+
     def open_data_folder(self):
-        """侧边栏「打开文件夹」：打开程序数据目录（名单模板与生成表都在这里）。"""
-        self._open_folder(self._base_dir())
+        """侧边栏「打开文件夹」：打开本月生成表所在的大文件夹（不存在则先创建）。"""
+        folder = self.get_folder_path()
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception:
+            folder = self._base_dir()
+        self._open_folder(folder)
 
     def _apply_ai_screenshot(self, batch):
         """AI 请求截图：target 周/月/全部，结果路径写入 screenshot_result.json 供 AI 读取。"""
