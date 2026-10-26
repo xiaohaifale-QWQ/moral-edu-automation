@@ -29,7 +29,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "2.1.0.2"
+APP_VERSION = "2.1.1.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -3125,22 +3125,6 @@ class MoralScoreApp:
             e2.delete(0, tk.END)
             e2.insert(0, UPDATE_MANIFEST_JSDELIVR)
 
-        row_c = ttk.Frame(p2)
-        row_c.pack(fill="x", pady=(14, 0))
-        ttk.Label(row_c, text="联系作者：xiaohai@fale52.top",
-                  style="Muted.TLabel").pack(side="left")
-
-        def copy_mail():
-            self.root.clipboard_clear()
-            self.root.clipboard_append("xiaohai@fale52.top")
-            try:
-                notify(self.root, "邮箱已复制：xiaohai@fale52.top",
-                       title="联系作者", kind="success", duration=5000)
-            except Exception:
-                pass
-
-        ttk.Button(row_c, text="复制邮箱", command=copy_mail).pack(side="left", padx=(8, 0))
-
         row_s = ttk.Frame(p2)
         row_s.pack(fill="x", pady=(10, 0))
         ttk.Button(row_s, text="保存", style="Primary.TButton",
@@ -3168,9 +3152,36 @@ class MoralScoreApp:
             "AI对接\\\\MCP配置.json 的内容即可。挪动安装目录或重装后，\\n"
             "点「重新生成 MCP 配置」按实际路径重写。")).pack(anchor="w", pady=(14, 0))
 
+        # ── 面板：联系作者 ──
+        p4 = tk.Frame(card, bg=PAGE_BG)
+        panels["contact"] = p4
+        ttk.Label(p4, text="联系作者", style="CardTitle.TLabel").pack(anchor="w")
+        row_mail = ttk.Frame(p4)
+        row_mail.pack(fill="x", pady=(14, 0))
+        ttk.Label(row_mail, text="xiaohai@fale52.top",
+                  style="CardTitle.TLabel").pack(side="left")
+
+        def copy_mail():
+            self.root.clipboard_clear()
+            self.root.clipboard_append("xiaohai@fale52.top")
+            try:
+                notify(self.root, "邮箱已复制：xiaohai@fale52.top",
+                       title="联系作者", kind="success", duration=5000)
+            except Exception:
+                pass
+
+        ttk.Button(row_mail, text="复制邮箱", command=copy_mail).pack(
+            side="left", padx=(12, 0))
+        ttk.Label(p4, wraplength=470, justify="left", style="Muted.TLabel", text=(
+            "反馈问题时请附上：\n"
+            "  1. 软件版本（设置左上角可见）\n"
+            "  2. 问题截图（周表/月表页的「截图」按钮可直接生成）\n"
+            "  3. 当月文件夹里的报错或现象说明")).pack(anchor="w", pady=(14, 0))
+
         add_nav("roster", "名单模板")
         add_nav("update", "版本与更新")
         add_nav("ai", "AI 对接")
+        add_nav("contact", "联系作者")
 
         show("roster")
 
