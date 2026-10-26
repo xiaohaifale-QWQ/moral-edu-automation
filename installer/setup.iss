@@ -1,4 +1,4 @@
-﻿; 德育分自动化系统 · Inno Setup 安装脚本（方案 3.3 节，A 路线）
+; 德育分自动化系统 · Inno Setup 安装脚本（方案 3.3 节，A 路线）
 ; 编译前提：
 ;   1. 安装 Inno Setup 6（https://jrsoftware.org/isinfo.php 或 winget install JRSoftware.InnoSetup）
 ;   2. 先跑 python tools/make_payload.py 组装出 installer\payload\ 完整目录
@@ -12,7 +12,7 @@
 ;     卸载完成后用户数据仍在（Inno 默认会删它自己装过的 名单模板.xlsx，必须绕）
 
 #define MyAppName "德育分自动化系统"
-#define MyAppVersion "1.9.4.2"
+#define MyAppVersion "1.10.0.0"
 #define MyAppExeName "德育分自动化系统.exe"
 #define MyAppId "{{8E7C1A52-7F3B-4C21-9A55-1D2C7B0E4F11}"
 

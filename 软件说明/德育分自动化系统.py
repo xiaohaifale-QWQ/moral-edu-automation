@@ -28,7 +28,7 @@ from tkwebui import (enable_dpi_awareness, apply_theme, SectionCard,
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # ── 版本与更新源（与 installer/setup.iss、仓库 version.json 保持一致）────
-APP_VERSION = "1.9.4.2"
+APP_VERSION = "1.10.0.0"
 UPDATE_MANIFEST_DEFAULT = "https://raw.githubusercontent.com/xiaohaifale-QWQ/moral-edu-automation/main/version.json"
 UPDATE_MANIFEST_JSDELIVR = "https://cdn.jsdelivr.net/gh/xiaohaifale-QWQ/moral-edu-automation@main/version.json"
 UPDATE_GH_API_LATEST = "https://api.github.com/repos/xiaohaifale-QWQ/moral-edu-automation/releases/latest"
@@ -376,14 +376,44 @@ class MoralScoreApp:
                       str(batch.get("week", "")))
             if target != self._cycle_key():
                 continue        # 不是当前周期：先留着，等切到那一周再填
-            if batch.get("type") == "dorm_stars":
+            batch_type = batch.get("type")
+            if batch_type == "dorm_stars":
                 ok = self._apply_ai_dorm_stars(batch)
                 self._archive_ai_file(path, name, ok=ok)
                 continue
+            if batch_type == "undo":
+                ok = self._apply_ai_undo(batch)
+                self._archive_ai_file(path, name, ok=ok)
+                continue
+            if self._is_batch_applied(batch):
+                # 同一批被重发（AI 重试/网络重传）：归档留痕，绝不重复写入
+                self._archive_ai_file(path, name, tag="dup")
+                continue
             if self._apply_ai_batch(batch):
+                self._mark_batch_applied(batch)
                 self._archive_ai_file(path, name, ok=True)
             else:
                 self._archive_ai_file(path, name, ok=False)
+
+    def _apply_ai_undo(self, batch):
+        """AI 要求撤回最近几批（只对当前周期的撤回栈有效）。"""
+        try:
+            times = int(batch.get("count") or 1)
+        except (TypeError, ValueError):
+            times = 1
+        times = max(1, min(times, 5))
+        if not getattr(self, "undo_stack", None):
+            notify(self.root, "AI 想撤回，但撤回栈是空的（切过周期或已经撤回过了）",
+                   title="撤回失败", kind="warn", duration=8000)
+            return False
+        done = 0
+        for _ in range(times):
+            if not self.undo_stack:
+                break
+            self.undo_last_action()
+            done += 1
+        notify(self.root, f"AI 已撤回 {done} 步", title="已撤回", kind="warn", duration=8000)
+        return done > 0
 
     def _apply_ai_dorm_stars(self, batch):
         """AI 卫生检查结果 → 直接设置寝室星级滑块（不写记录）。
@@ -446,6 +476,19 @@ class MoralScoreApp:
         if not pairs:
             return False
 
+        # replace=true：先删掉这些学生「同一明细」的旧 AI 记录，再写新的。
+        # 这样同一个奖项重发一次是「覆盖」，不会越改越多。
+        if batch.get("replace"):
+            keys = {(sid, reason) for sid, _score, reason, _m, _a in pairs}
+            for sid, info in self.week_data.items():
+                recs = info.get('records') or []
+                if not recs:
+                    continue
+                keep = [r for r in recs
+                        if not (is_ai_record(r) and (sid, str(r[1])) in keys)]
+                if len(keep) != len(recs):
+                    info['records'] = keep
+
         self._push_undo()          # 先快照，再改动
         stamp = datetime.datetime.now().strftime("%H:%M:%S")
         touched = []
@@ -504,21 +547,72 @@ class MoralScoreApp:
         self.week_status.config(text=f"AI 导入了 {len(touched)} 条记录", foreground=OK_C)
         return True
 
-    def _archive_ai_file(self, path, name, ok=True):
+    def _archive_ai_file(self, path, name, ok=True, tag=""):
         """处理过的批次移到 done 目录留痕，避免重复扫描。"""
         try:
             done = os.path.join(self._bridge_dir(), "done")
             os.makedirs(done, exist_ok=True)
             stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            prefix = "ok" if ok else "bad"
+            prefix = tag or ("ok" if ok else "bad")
             os.replace(path, os.path.join(done, f"{stamp}-{prefix}-{name}"))
+        except Exception:
+            pass
+
+    # ---- 批次幂等：同一个 batch id 只应用一次，AI 重发不会翻倍 ----
+    def _applied_batches_path(self):
+        return os.path.join(self._bridge_dir(), "applied_batches.json")
+
+    def _load_applied_batches(self):
+        if not hasattr(self, "_applied_cache"):
+            self._applied_cache = None
+        if self._applied_cache is None:
+            data = {}
+            try:
+                with open(self._applied_batches_path(), "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    data = loaded
+            except Exception:
+                data = {}
+            self._applied_cache = data
+        return self._applied_cache
+
+    def _batch_token(self, batch):
+        """批次身份：优先用 AI 给的 key，其次用批次 id。"""
+        token = str(batch.get("batch_key") or batch.get("id") or "").strip()
+        return token
+
+    def _is_batch_applied(self, batch):
+        token = self._batch_token(batch)
+        if not token:
+            return False
+        return token in self._load_applied_batches()
+
+    def _mark_batch_applied(self, batch):
+        token = self._batch_token(batch)
+        if not token:
+            return
+        cache = self._load_applied_batches()
+        cache[token] = datetime.datetime.now().isoformat(timespec="seconds")
+        if len(cache) > 500:          # 只留最近 500 个，别让文件无限长
+            for old in sorted(cache, key=lambda k: cache[k])[:-500]:
+                cache.pop(old, None)
+        try:
+            os.makedirs(self._bridge_dir(), exist_ok=True)
+            with open(self._applied_batches_path(), "w", encoding="utf-8") as f:
+                json.dump(cache, f, ensure_ascii=False, indent=1)
         except Exception:
             pass
 
     def on_close(self):
         """关窗前拦截：有未保存录入时先问一句。"""
-        if self.unsaved and not self._confirm_discard("退出"):
+        action = self._ask_unsaved("退出", allow_carry=False)
+        if action == "cancel":
             return
+        if action == "save":
+            self.save_week_data()
+            if self.unsaved:
+                return
         self._write_bridge_state(running=False)
         self.root.destroy()
 
@@ -1342,6 +1436,9 @@ class MoralScoreApp:
         bar.pack(fill="x", pady=(0, 12))
         self.ai_status = ttk.Label(bar, text="", style="Muted.TLabel")
         self.ai_status.pack(side="left")
+        # 队列里有别的周期的批次时，这里给个一键跳过去的按钮
+        self.btn_ai_jump = ttk.Button(bar, text="跳到队列周期",
+                                      command=self._jump_to_pending_cycle)
         # MCP 配置/接入说明/打开文件夹 收进了左下角「设置」对话框，这里只留状态
         ttk.Label(bar, text="接入与配置入口在左下角「设置」", style="Muted.TLabel").pack(side="right")
 
@@ -1752,27 +1849,95 @@ class MoralScoreApp:
         self._rebuild_dorm_ai_rows()
         self._refresh_ai_status_only()
 
+    def _pending_batches(self):
+        """读 inbox 里排队批次的目标周期。
+
+        返回 [{"cycle": (年,月,周), "count": 条数, "name": 文件名}]，按文件名（时间）排序。
+        """
+        inbox = os.path.join(self._bridge_dir(), "inbox")
+        batches = []
+        if not os.path.isdir(inbox):
+            return batches
+        try:
+            names = sorted(os.listdir(inbox))
+        except Exception:
+            return batches
+        for name in names:
+            if not name.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(inbox, name), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            cycle = (str(data.get("year", "")), str(data.get("month", "")),
+                     str(data.get("week", "")))
+            if data.get("type") == "dorm_stars":
+                count = len(data.get("stars") or {})
+                label = "寝室检查"
+            else:
+                count = len(data.get("records") or [])
+                label = "记录"
+            batches.append({"cycle": cycle, "count": count,
+                            "label": label, "name": name})
+        return batches
+
     def _refresh_ai_status_only(self):
         """只刷新顶部状态行，不动列表。"""
         if not hasattr(self, "ai_status"):
             return
         config_ok = os.path.exists(self._ai_config_path())
-        pending = 0
-        inbox = os.path.join(self._bridge_dir(), "inbox")
-        if os.path.isdir(inbox):
-            try:
-                pending = len([f for f in os.listdir(inbox) if f.endswith(".json")])
-            except Exception:
-                pending = 0
+        batches = self._pending_batches()
         now_count = len(self._collect_ai_rows())
         parts = [f"配置文件：{'已就绪' if config_ok else '缺失'}",
                  f"当前周期 AI 记录 {now_count} 条"]
-        if pending:
-            parts.append(f"队列中有 {pending} 批待导入（切到对应周期后自动填入）")
+        elsewhere = [b for b in batches if b["cycle"] != self._cycle_key()]
+        if batches:
+            detail = "、".join(
+                f"{b['cycle'][0]}年{b['cycle'][1]}月第{b['cycle'][2]}周"
+                f"（{b['count']} 条{b['label']}）" for b in batches)
+            if elsewhere:
+                parts.append(f"队列待导入：{detail}，切到对应周期会自动填入")
+            else:
+                parts.append(f"队列待导入：{detail}")
         else:
             parts.append("队列为空")
         self.ai_status.config(text="  ·  ".join(parts),
-                              foreground=OK_C if config_ok else WARN_C)
+                              foreground=WARN_C if elsewhere else
+                              (OK_C if config_ok else WARN_C))
+
+        # 「跳到队列周期」按钮：只在队列里有别的周期时出现
+        btn = getattr(self, "btn_ai_jump", None)
+        if btn is None:
+            return
+        if elsewhere:
+            first = elsewhere[0]["cycle"]
+            btn.config(text=f"切到 {first[0]}年{first[1]}月第{first[2]}周")
+            if not btn.winfo_ismapped():
+                btn.pack(side="left", padx=(10, 0))
+        elif btn.winfo_ismapped():
+            btn.pack_forget()
+
+    def _jump_to_pending_cycle(self):
+        """把软件切到队列批次指向的周期（走正常的未保存询问流程）。"""
+        batches = self._pending_batches()
+        targets = [b["cycle"] for b in batches if b["cycle"] != self._cycle_key()]
+        if not targets:
+            return
+        year, month, week = targets[0]
+        if not (year and month and week):
+            messagebox.showwarning("队列里这批没写周期",
+                                   "批次文件缺少 year/month/week，不会自动填入。\n"
+                                   "让 AI 重新发一次带周期的批次。")
+            return
+        self._suspend_cycle_cb = True
+        try:
+            self.current_year.set(year)
+            self.current_month.set(month)
+            self.current_week.set(week)
+        finally:
+            self._suspend_cycle_cb = False
+        self._switch_cycle(f"切到 {year}年{month}月第{week}周")
 
     def _edit_ai_record(self, sid, idx):
         """点一行 → 改这条记录的分值和明细。"""
@@ -3033,40 +3198,208 @@ class MoralScoreApp:
     def _cycle_key(self):
         return (self.current_year.get(), self.current_month.get(), self.current_week.get())
 
-    def _confirm_discard(self, what):
-        """有未保存录入时先问用户。返回 True 表示可以继续。"""
+    def _week_file(self):
+        return os.path.join(self.get_folder_path(), self.get_week_file_name())
+
+    def _remember_week_file_state(self):
+        """记下「载入时这个周表文件在不在」，用来发现被外部删掉。"""
+        path = self._week_file()
+        self.week_file_state = (path, os.path.exists(path))
+
+    def _on_window_focus(self, event=None):
+        self._check_disk_drift()
+
+    def _check_disk_drift(self):
+        """周表文件被软件外部删掉了：提醒一句，别让内存里的记录静默写回去。"""
+        state = getattr(self, "week_file_state", None)
+        if not state:
+            return
+        path, existed = state
+        if not existed or path != self._week_file():
+            return
+        if os.path.exists(path):
+            return
+        self.week_file_state = (path, False)      # 只提醒一次
+        try:
+            count = sum(len(info.get('records') or []) for info in self.week_data.values())
+        except Exception:
+            count = 0
+        name = os.path.basename(path)
+        if not count:
+            self.week_status.config(text=f"{name} 已在软件外被删除", foreground=WARN_C)
+            return
+        self.week_status.config(
+            text=f"{name} 已被删除，内存里仍有 {count} 条记录", foreground=WARN_C)
+        notify(self.root,
+               f"{name} 被删掉了，软件内存里还留着 {count} 条记录。\n"
+               f"直接点「生成周表」会把它重新写回来；不想留就先点「撤回」或清空。",
+               title="周表文件不见了", kind="warn", duration=25000)
+
+    def _ask_unsaved(self, what, allow_carry=True):
+        """有未保存录入时问一句。返回 save / carry / discard / cancel。
+
+        carry = 把这一周还没生成的录入（含寝室检查次数）整体搬到要切过去的那一周。
+        allow_carry=False 时不给这个选项（比如关窗退出）。
+        """
         if not self.unsaved:
-            return True
-        choice = messagebox.askyesnocancel(
-            "有未保存的录入",
-            f"当前周的加减分还没生成表格。\n\n"
-            f"【是】先生成表格，再{what}\n"
-            f"【否】放弃这些改动，直接{what}\n"
-            f"【取消】留在原处")
-        if choice is None:
-            return False
-        if choice:
-            self.save_week_data()
-            return not self.unsaved      # 保存被取消/失败则不继续
-        return True
+            return "discard"
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("有未保存的录入")
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        self._place_dialog(dlg, 470, 260)
+        result = {"value": "cancel"}
+
+        outer = ttk.Frame(dlg, padding=20)
+        outer.pack(fill="both", expand=True)
+        ttk.Label(outer, text="当前周的加减分还没生成表格。").pack(anchor="w")
+        ttk.Label(outer, text=f"要{what}，这些改动怎么处理？").pack(anchor="w", pady=(4, 12))
+
+        try:
+            n_rec = sum(len(info.get('records') or []) for info in self.week_data.values())
+        except Exception:
+            n_rec = 0
+        try:
+            n_dorm = sum(len(v) for v in getattr(self, "dorm_inspections", {}).values())
+        except Exception:
+            n_dorm = 0
+        ttk.Label(outer,
+                  text=f"没生成的：{n_rec} 条加减分记录、{n_dorm} 次寝室检查").pack(anchor="w")
+
+        btns = ttk.Frame(outer)
+        btns.pack(side="bottom", fill="x", pady=(16, 0))
+
+        def pick(value):
+            result["value"] = value
+            dlg.destroy()
+
+        ttk.Button(btns, text="先生成表格", command=lambda: pick("save")).pack(side="left")
+        if allow_carry:
+            ttk.Button(btns, text="整个迁移过去",
+                       command=lambda: pick("carry")).pack(side="left", padx=6)
+        ttk.Button(btns, text="放弃改动", command=lambda: pick("discard")).pack(side="left")
+        ttk.Button(btns, text="取消", command=lambda: pick("cancel")).pack(side="right")
+        dlg.protocol("WM_DELETE_WINDOW", lambda: pick("cancel"))
+        dlg.bind("<Escape>", lambda e: pick("cancel"))
+        dlg.grab_set()
+        dlg.wait_window()
+        return result["value"]
 
     def _restore_cycle(self):
         y, m, w = self._loaded_cycle
-        self.current_year.set(y)
-        self.current_month.set(m)
-        self.current_week.set(w)
+        self._suspend_cycle_cb = True
+        try:
+            self.current_year.set(y)
+            self.current_month.set(m)
+            self.current_week.set(w)
+        finally:
+            self._suspend_cycle_cb = False
+
+    def _switch_cycle(self, what):
+        """切周次/切考评周期的统一入口。"""
+        action = self._ask_unsaved(what)
+        if action == "cancel":
+            self._restore_cycle()
+            return
+        snap = None
+        if action == "carry":
+            snap = self._snapshot_unsaved()
+        elif action == "save":
+            self.save_week_data()
+            if self.unsaved:            # 保存被取消或失败
+                self._restore_cycle()
+                return
+        self.load_week_data()
+        if snap is not None:
+            self._carry_unsaved(snap)
 
     def on_cycle_change(self):
-        if not self._confirm_discard("切换考评周期"):
-            self._restore_cycle()
+        if getattr(self, "_suspend_cycle_cb", False):
             return
-        self.load_week_data()
+        self._switch_cycle("切换考评周期")
 
     def on_week_change(self):
-        if not self._confirm_discard("切换周次"):
-            self._restore_cycle()
+        if getattr(self, "_suspend_cycle_cb", False):
             return
-        self.load_week_data()
+        self._switch_cycle("切换周次")
+
+    def _snapshot_unsaved(self):
+        """把没落盘的录入和寝室检查次数拷一份，供「整个迁移」用。"""
+        return {
+            "week": deepcopy(self.week_data),
+            "dorm": deepcopy(getattr(self, "dorm_inspections", {})),
+            "dorm_ai": set(getattr(self, "dorm_ai_set", set())),
+        }
+
+    def _carry_unsaved(self, snap):
+        """把上一份快照整体搬到当前周期（记录直接追加，不重算分数）。"""
+        moved = 0
+        for sid, info in snap["week"].items():
+            if sid not in self.week_data:
+                continue
+            recs = list(info.get('records') or [])
+            if not recs:
+                continue
+            self.week_data[sid]['records'].extend(deepcopy(recs))
+            moved += len(recs)
+
+        dorm_moved = 0
+        for dorm, values in (snap["dorm"] or {}).items():
+            if not values:
+                continue
+            self.dorm_inspections.setdefault(dorm, []).extend(deepcopy(values))
+            dorm_moved += len(values)
+        if hasattr(self, "dorm_ai_set"):
+            self.dorm_ai_set |= snap["dorm_ai"]
+
+        if not moved and not dorm_moved:
+            self.week_status.config(text="这一周本来就没有可迁移的改动", foreground=WARN_C)
+            return
+
+        self.unsaved = True
+        self.week_scanned = False
+        self._mark_month_stale()
+        if not self.showing_inquiry:
+            self.refresh_week_tree()
+        self._restore_dorm_sliders_from_inspections()
+
+        parts = []
+        if moved:
+            parts.append(f"{moved} 条记录")
+        if dorm_moved:
+            parts.append(f"{dorm_moved} 次寝室检查")
+        target = (f"{self.current_year.get()}年{self.current_month.get()}月"
+                  f"第{self.current_week.get()}周")
+        self.week_status.config(
+            text=f"已把 {'和 '.join(parts)} 迁移到 {target}，记得生成周表",
+            foreground=WARN_C)
+
+    def _restore_dorm_sliders_from_inspections(self):
+        """迁移后把滑块拨回检查结果，别出现「看着四星、实际按五星算」。"""
+        controls = getattr(self, "dorm_controls", {}) or {}
+        for dorm, values in getattr(self, "dorm_inspections", {}).items():
+            if not values:
+                continue
+            star = values[-1]
+            if dorm in self.dorm_stars:
+                self.dorm_stars[dorm] = star
+            seg = controls.get(dorm)
+            if seg is None:
+                continue
+            try:
+                if int(seg.variable.get()) != int(star):
+                    seg.variable.set(star)
+            except Exception:
+                pass
+        for name in ("_rebuild_dorm_ai_rows", "_paint_dorm_states"):
+            fn = getattr(self, name, None)
+            if fn is None:
+                continue
+            try:
+                fn()
+            except Exception:
+                pass
 
     # ---------------- 第一页：周表逻辑 ----------------
     def load_week_data(self):
@@ -3158,6 +3491,10 @@ class MoralScoreApp:
         else:
             self.week_status.config(text="周表尚未创建", foreground=WARN_C)
 
+        # 上一周期收到的寝室检查次数不能跟着走，否则上周的五星会被算进这周
+        if getattr(self, "dorm_inspections", None):
+            self.dorm_inspections = {}
+
         # 星级选择跟着周次走，避免把上一周选的星级打到这一周
         self._sync_dorm_stars()
         if not self.showing_inquiry:
@@ -3168,6 +3505,15 @@ class MoralScoreApp:
             self.refresh_ai_view()
         # 周期变了要马上告诉 AI，别等心跳
         self._write_bridge_state()
+
+        # 记下这一步磁盘上有没有这个周表；窗口回到前台时检查有没有被外部删掉
+        self._remember_week_file_state()
+        if not getattr(self, "_drift_bound", False):
+            try:
+                self.root.bind("<FocusIn>", self._on_window_focus, add="+")
+                self._drift_bound = True
+            except Exception:
+                pass
 
     def add_manual_score(self):
         kw = self.clean_name(self.en_name.get())
@@ -3461,14 +3807,31 @@ class MoralScoreApp:
 
         highlight_item = None
         for sid, info in self.week_data.items():
-            total = sum(r[0] for r in info['records'])
-            reasons = " | ".join([r[1] for r in info['records']])
+            records = info.get('records') or []
+            total = sum(r[0] for r in records)
             tags = ("changed",) if sid in highlight_sids else ()
-            item = self.tree_week.insert("", "end", values=(sid, info['name'], self._fmt_score(total),
-                                                      reasons, info['role'], info['dorm']),
-                                         tags=tags)
-            if sid in highlight_sids:
-                highlight_item = item
+            if not records:
+                item = self.tree_week.insert(
+                    "", "end", iid=f"{sid}@-1",
+                    values=(sid, info['name'], self._fmt_score(total), "",
+                            info['role'], info['dorm']),
+                    tags=tags)
+                if sid in highlight_sids and highlight_item is None:
+                    highlight_item = item
+                continue
+            # 一人多条：逐条向下排，每条独占一行（以前用「|」挤在一格里，看不清也好改错）
+            for idx, rec in enumerate(records):
+                first = (idx == 0)
+                values = (sid if first else "",
+                          info['name'] if first else "",
+                          self._fmt_score(total) if first else "",
+                          str(rec[1]),
+                          info['role'] if first else "",
+                          info['dorm'] if first else "")
+                item = self.tree_week.insert("", "end", iid=f"{sid}@{idx}",
+                                             values=values, tags=tags)
+                if first and sid in highlight_sids and highlight_item is None:
+                    highlight_item = item
         if highlight_item:
             self.tree_week.see(highlight_item)
             self.tree_week.selection_set(highlight_item)
@@ -3480,8 +3843,17 @@ class MoralScoreApp:
         # 寝室统计页的「AI 写入的寝室记录」跟着周次/数据一起刷新
         self._rebuild_dorm_ai_rows()
 
+    @staticmethod
+    def _parse_tree_iid(iid):
+        """行标识 sid@记录序号（-1 = 这个学生本周还没有记录）。"""
+        sid, _, idx = str(iid).partition("@")
+        try:
+            return sid, int(idx)
+        except ValueError:
+            return sid, -1
+
     def _on_tree_double_click(self, event):
-        """双击 TreeView 编辑 总加分(#3) 或 项目明细(#4)"""
+        """双击编辑 总加分(#3) 或 项目明细(#4)。一人多条时只改被双击的那一条。"""
         if self.showing_inquiry:
             return
         region = self.tree_week.identify_region(event.x, event.y)
@@ -3494,11 +3866,24 @@ class MoralScoreApp:
         col_idx = int(column.replace("#", ""))
         if col_idx not in (3, 4):
             return
+        sid, rec_idx = self._parse_tree_iid(row)
+        if sid not in self.week_data:
+            return
+        records = self.week_data[sid]['records']
+        if col_idx == 4:
+            if not records:
+                # 以前这里只是悄悄改状态栏，看着就像「双击没反应」
+                messagebox.showinfo(
+                    "这个学生还没有记录",
+                    f"{self.week_data[sid]['name']} 这一周还没有加减分记录。\n\n"
+                    "先在「总加分」列双击填个分值，再回来改明细。")
+                return
+            if not (0 <= rec_idx < len(records)):
+                return
         values = self.tree_week.item(row, "values")
         if not values:
             return
-        sid = values[0]
-        old_text = values[col_idx - 1]
+        old_text = values[col_idx - 1] if col_idx - 1 < len(values) else ""
         bbox = self.tree_week.bbox(row, column)
         if not bbox:
             return
@@ -3509,54 +3894,65 @@ class MoralScoreApp:
         edit_entry.select_range(0, tk.END)
         edit_entry.focus_set()
 
-        saved = [False]
+        state = {"done": False}
+
+        def cancel_edit(event=None):
+            if state["done"]:
+                return
+            state["done"] = True
+            edit_entry.destroy()
 
         def save_edit(event=None):
-            if saved[0]:
+            if state["done"]:
                 return
-            saved[0] = True
+            state["done"] = True
             new_text = edit_entry.get().strip()
             edit_entry.destroy()
             if sid not in self.week_data:
                 return
-            records = self.week_data[sid]['records']
-            self._push_undo()
-            self.last_edited_sid = sid
+            records_now = self.week_data[sid]['records']
+            if new_text == str(old_text).strip():
+                return                      # 没改就不入撤回栈
 
             if col_idx == 3:
-                # 编辑总加分 → 调整最后一条记录的分数
+                # 编辑总加分：把差额记到被双击的那条记录上
                 try:
                     new_total = self._eval_score(new_text)
                 except (ValueError, SyntaxError):
+                    messagebox.showwarning(
+                        "分值看不懂", f"「{new_text}」不是分数。\n可以写 1、-0.5、10+2 这种。")
                     return
-                old_total = sum(r[0] for r in records)
+                old_total = sum(r[0] for r in records_now)
                 diff = new_total - old_total
-                if abs(diff) > 0.001:
-                    if records:
-                        last = records[-1]
-                        # 保留第 3 位的来源标记（如果这条是 AI 写入的）
-                        records[-1] = [last[0] + diff, last[1]] + list(last[2:])
-                    else:
-                        # 原本没有任何记录：直接补一条，否则改了没反应
-                        records.append((new_total, "手动调整"))
-            else:
-                # 编辑项目明细 → 只改原因，不动分数
-                new_reasons = [s.strip() for s in new_text.split("|") if s.strip()]
-                if not records:
-                    self.week_status.config(
-                        text="这个学生还没有记录，先在「分值」列添加分数", foreground=WARN_C)
+                if abs(diff) <= 0.001:
                     return
-                n = min(len(new_reasons), len(records))
-                for i in range(n):
-                    rec = records[i]
-                    # 只换原因，保留分值和来源标记
-                    records[i] = [rec[0], new_reasons[i]] + list(rec[2:])
+                self._push_undo()
+                if 0 <= rec_idx < len(records_now):
+                    rec = records_now[rec_idx]
+                    records_now[rec_idx] = [rec[0] + diff, rec[1]] + list(rec[2:])
+                elif records_now:
+                    rec = records_now[-1]
+                    records_now[-1] = [rec[0] + diff, rec[1]] + list(rec[2:])
+                else:
+                    # 原本没有任何记录：直接补一条，否则改了没反应
+                    records_now.append([new_total, "手动调整", {"src": "manual"}])
+            else:
+                # 编辑项目明细：只改这一条的原因，不动分数
+                if not (0 <= rec_idx < len(records_now)):
+                    return
+                if str(records_now[rec_idx][1]) == new_text:
+                    return
+                self._push_undo()
+                rec = records_now[rec_idx]
+                records_now[rec_idx] = [rec[0], new_text] + list(rec[2:])
 
+            self.last_edited_sid = sid
             if not self.showing_inquiry:
                 self.refresh_week_tree()
 
         edit_entry.bind("<Return>", save_edit)
         edit_entry.bind("<FocusOut>", save_edit)
+        edit_entry.bind("<Escape>", cancel_edit)
 
     def undo_last_action(self):
         if not self.undo_stack:
@@ -3750,6 +4146,7 @@ class MoralScoreApp:
                            title="生成完成", kind="success", duration=15000,
                            action=("打开文件", lambda p=file_path: self._open_path(p)))
                     self.week_status.config(text=f"已生成第{m}月第{w}周周表", foreground=OK_C)
+                    self._remember_week_file_state()
                     self.week_scanned = False
                     self._mark_month_stale()
                     self.check_month_ready()

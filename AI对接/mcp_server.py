@@ -791,6 +791,8 @@ def tool_add_records(args):
         return text_result("\n".join(lines), True)
 
     batch_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    replace = bool(args.get("replace"))
+    batch_key = clean(args.get("batch_key"))
     batch = {
         "id": batch_id,
         "year": int(year),
@@ -801,6 +803,10 @@ def tool_add_records(args):
         "note": clean(args.get("note")),
         "records": resolved,
     }
+    if replace:
+        batch["replace"] = True
+    if batch_key:
+        batch["batch_key"] = batch_key
     write_json_atomic(os.path.join(INBOX_DIR, f"{batch_id}.json"), batch)
 
     state = read_app_state()
@@ -918,6 +924,45 @@ def tool_set_dorm_stars(args):
     return text_result("\n".join(lines))
 
 
+def tool_undo_last(args):
+    """请软件撤回最近的导入（只对软件当前周期有效）。"""
+    year, month, week = guess_target(args)
+    if None in (year, month, week):
+        return text_result("无法确定要继续撤回哪一周，请显式传 year / month / week。", True)
+    try:
+        count = int(args.get("count") or 1)
+    except (TypeError, ValueError):
+        count = 1
+    count = max(1, min(count, 5))
+
+    state = read_app_state()
+    same_cycle = (str(state.get("year")) == str(year)
+                  and str(state.get("month")) == str(month)
+                  and str(state.get("week")) == str(week))
+    if not same_cycle:
+        return text_result(
+            f"撤回只能对软件当前周期生效。软件现在停在 "
+            f"{state.get('year')}年{state.get('month')}月第{state.get('week')}周，"
+            f"而你要撤的是 {year}年{month}月第{week}周。\n"
+            f"请让用户先把软件切到那一周，再重新调用。", True)
+
+    batch_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    batch = {
+        "id": batch_id,
+        "type": "undo",
+        "count": count,
+        "year": int(year),
+        "month": int(month),
+        "week": int(week),
+        "created": datetime.datetime.now().isoformat(timespec="seconds"),
+        "source": "mcp",
+    }
+    write_json_atomic(os.path.join(INBOX_DIR, f"{batch_id}.json"), batch)
+    return text_result(
+        f"已请求撤回最近 {count} 步（{year}年{month}月第{week}周）。软件约 2 秒内处理。\n"
+        "如果软件提示撤回栈是空的，说明中途切过周期——撤回快照只在同一周期内有效。")
+
+
 TOOLS = [
     {
         "name": "add_records",
@@ -958,6 +1003,12 @@ TOOLS = [
                 "month": {"type": "integer", "description": "目标月份，省略=软件当前周期"},
                 "week": {"type": "integer", "description": "目标周次，省略=软件当前周期"},
                 "note": {"type": "string", "description": "备注，便于日后追溯"},
+                "replace": {"type": "boolean",
+                            "description": "true = 同一个人同一明细的旧 AI 记录先删掉再写"
+                                           "（重发时用这个，避免越改越多）；默认 false 追加"},
+                "batch_key": {"type": "string",
+                              "description": "幂等键。重试同一批时带相同的值，"
+                                             "软件不会重复写入"},
             },
             "required": ["records"],
         },
@@ -1032,6 +1083,22 @@ TOOLS = [
                        "add_records 已支持姓名模糊匹配，一般不用先查名单。",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "undo_last",
+        "description": "【写错了用它】撤回最近一次 AI 导入，可一次撤多步（最多 5）。"
+                       "用户说「刚才那批错了」「删掉吧」「撤回」时调这个，"
+                       "不要用写负分的方式抵消。"
+                       "只能撤软件当前周期：撤回快照不跨周期，切过周就撤不回去了。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer", "description": "撤回几步，默认 1，最多 5"},
+                "year": {"type": "integer", "description": "哪一年，省略=软件当前周期"},
+                "month": {"type": "integer", "description": "哪个月，省略=软件当前周期"},
+                "week": {"type": "integer", "description": "第几周，省略=软件当前周期"},
+            },
+        },
+    },
 ]
 
 HANDLERS = {
@@ -1042,6 +1109,7 @@ HANDLERS = {
     "get_month_summary": tool_get_month_summary,
     "add_records": tool_add_records,
     "set_dorm_stars": tool_set_dorm_stars,
+    "undo_last": tool_undo_last,
 }
 
 

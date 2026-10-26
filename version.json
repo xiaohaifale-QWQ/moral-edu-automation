@@ -1,14 +1,14 @@
 {
-  "version": "1.9.4.2",
-  "notes": "1. 修复安装程序不再显示「选择安装位置」页的问题：现在每次安装都会显示路径选择（已装过的电脑会预填上次目录，可自行修改）",
+  "version": "1.10.0.0",
+  "notes": "周表一人多条改多行；双击改分修好；切周期可整个迁移；AI 页队列可视化；寝室检查跨周期计数修复；MCP 新增 undo_last / replace / batch_key",
   "min_supported": "1.5.0",
   "mandatory": false,
   "download": {
     "win64": {
-      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.2/deyufen-1.9.4.2-win64.zip",
-      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.9.4.2/deyufen-1.9.4.2-win64.zip",
-      "sha256": "8c9804e542e5cc3c7e5eda627140ad78b635e7c077dc490a0ebd6fa5fcf6e521",
-      "size": 110630932
+      "url": "https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.10.0.0/deyufen-1.10.0.0-win64.zip",
+      "mirror": "https://ghfast.top/https://github.com/xiaohaifale-QWQ/moral-edu-automation/releases/download/v1.10.0.0/deyufen-1.10.0.0-win64.zip",
+      "sha256": "f5b26abc602e0ccaff91ddea4cccf9ba1ee4090ee01e31580df716478c4e2641",
+      "size": 110644066
     }
   }
 }
